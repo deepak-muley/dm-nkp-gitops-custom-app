@@ -96,4 +96,3 @@ var _ = Describe("Server Integration", func() {
 		})
 	})
 })
-

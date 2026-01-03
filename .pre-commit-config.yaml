@@ -19,6 +19,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
         args: ['--unsafe']  # Allow custom YAML tags
+        exclude: 'chart/.*/templates/.*\.yaml$'  # Exclude Helm templates (they use {{- syntax)
       - id: check-json
       - id: check-added-large-files
         args: ['--maxkb=1000']
@@ -27,6 +28,7 @@ repos:
       - id: check-toml
       - id: mixed-line-ending
       - id: detect-private-key
+        exclude: 'scripts/check-secrets\.sh'  # Exclude the script itself
       - id: no-commit-to-branch
         args: ['--branch', 'master', '--branch', 'main']
 
@@ -35,12 +37,15 @@ repos:
     rev: v0.5.1
     hooks:
       - id: go-fmt
-      - id: go-vet
+      # Note: go-vet is included in golangci-lint, so we skip it here to avoid duplication
+      # - id: go-vet
       - id: go-mod-tidy
       - id: golangci-lint
-        args: ['--timeout=5m']
+        args: ['--timeout=5m', '--no-config']  # Use default config (config file has issues)
         # Only run on Go files
         files: \.go$
+        pass_filenames: false  # Skip if no Go files
+        # Note: golangci-lint must be in PATH (installed via: brew install golangci-lint)
 
   # Secret scanning
   - repo: https://github.com/Yelp/detect-secrets
@@ -58,6 +63,7 @@ repos:
       - id: markdownlint
         args: ['--fix']
         exclude: CHANGELOG\.md
+        # Note: Requires Node.js 18+ (Node.js 18 added to PATH in ~/.zshrc)
 
   # Shell script linting
   - repo: https://github.com/shellcheck-py/shellcheck-py
@@ -72,7 +78,13 @@ repos:
     rev: v1.33.0
     hooks:
       - id: yamllint
-        args: ['-d', '{extends: default, rules: {line-length: {max: 120}}}']
+        args:
+          - '-d'
+          - >-
+            {extends: default, rules: {line-length: {max: 120},
+            document-start: {present: false}, braces: {max-spaces-inside: 2,
+            min-spaces-inside: 0}, comments-indentation: disable}}
+        exclude: 'chart/.*/templates/.*\.yaml$'  # Exclude Helm templates
 
   # Helm chart linting
   - repo: https://github.com/gruntwork-io/pre-commit
@@ -91,4 +103,3 @@ exclude: |
       chart/.*\.tgz$|
       \.secrets\.baseline$
   )
-

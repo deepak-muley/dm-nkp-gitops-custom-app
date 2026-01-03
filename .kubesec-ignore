@@ -1,4 +1,3 @@
 # Kubesec ignore file
 # Add any known false positives or acceptable risks here
 # Format: rule-id:reason
-

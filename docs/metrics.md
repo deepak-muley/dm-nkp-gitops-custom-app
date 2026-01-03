@@ -26,7 +26,8 @@ Total number of HTTP requests grouped by method and status code.
 - **Labels**:
   - `method`: HTTP method (GET, POST, etc.)
   - `status`: HTTP status code (200, 404, 500, etc.)
-- **Example**: 
+- **Example**:
+
   ```
   http_requests_by_method_total{method="GET",status="200"} 35
   http_requests_by_method_total{method="POST",status="201"} 7
@@ -61,6 +62,7 @@ Distribution of HTTP request durations in seconds.
 - **Labels**: None
 - **Buckets**: Default Prometheus buckets (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
 - **Example**:
+
   ```
   http_request_duration_seconds_bucket{le="0.005"} 10
   http_request_duration_seconds_bucket{le="0.01"} 25
@@ -78,6 +80,7 @@ Distribution of HTTP response sizes in bytes.
 - **Labels**: None
 - **Quantiles**: 0.5 (p50), 0.9 (p90), 0.99 (p99)
 - **Example**:
+
   ```
   http_response_size_bytes{quantile="0.5"} 150
   http_response_size_bytes{quantile="0.9"} 200
@@ -129,6 +132,7 @@ http_active_connections
 A sample Grafana dashboard JSON is available in `docs/grafana-dashboard.json` (to be created).
 
 Key panels:
+
 - Request rate over time
 - Request duration percentiles
 - Request count by method
@@ -140,6 +144,7 @@ Key panels:
 When deployed with ServiceMonitor, Prometheus will automatically discover and scrape these metrics.
 
 ServiceMonitor configuration:
+
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -160,6 +165,7 @@ spec:
 To add a new metric:
 
 1. Define in `internal/metrics/metrics.go`:
+
    ```go
    var MyCustomMetric = promauto.NewCounter(prometheus.CounterOpts{
        Name: "my_custom_metric_total",
@@ -168,6 +174,7 @@ To add a new metric:
    ```
 
 2. Use in your code:
+
    ```go
    metrics.MyCustomMetric.Inc()
    ```
@@ -177,10 +184,10 @@ To add a new metric:
 ## Metric Naming Conventions
 
 Follow Prometheus naming conventions:
+
 - Use `_total` suffix for counters
 - Use `_seconds` suffix for durations
 - Use `_bytes` suffix for byte sizes
 - Use base units (seconds, bytes, not milliseconds, kilobytes)
 - Use snake_case for metric names
 - Use descriptive names
-

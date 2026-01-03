@@ -17,4 +17,3 @@ spec:
       name: metrics
   selector:
     app: dm-nkp-gitops-custom-app
-

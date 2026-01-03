@@ -19,9 +19,10 @@ Security vulnerabilities should be reported privately to prevent exploitation.
 
 ### 2. Report the vulnerability
 
-Please email security concerns to: deepak.muley@gmail.com
+Please email security concerns to: <deepak.muley@gmail.com>
 
 Or use GitHub Security Advisories:
+
 - Go to the repository's **Security** tab
 - Click **Report a vulnerability**
 - Fill out the security advisory form
@@ -72,6 +73,7 @@ See `.github/workflows/security.yml` for details.
 ## Security Updates
 
 Security updates are released as:
+
 - **Patch versions** for critical vulnerabilities
 - **Minor versions** for important security improvements
 - **Security advisories** published in the repository
@@ -100,10 +102,10 @@ Before deploying to production:
 ## Contact
 
 For security-related questions or concerns:
-- **Email**: deepak.muley@gmail.com
+
+- **Email**: <deepak.muley@gmail.com>
 - **GitHub Security Advisories**: Use the Security tab in this repository
 
 ---
 
-**Note**: For security concerns, contact deepak.muley@gmail.com or use GitHub Security Advisories
-
+**Note**: For security concerns, contact <deepak.muley@gmail.com> or use GitHub Security Advisories

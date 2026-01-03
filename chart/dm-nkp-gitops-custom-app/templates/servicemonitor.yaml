@@ -15,4 +15,3 @@ spec:
       scrapeTimeout: {{ .Values.prometheus.serviceMonitor.scrapeTimeout }}
       path: {{ .Values.prometheus.serviceMonitor.path }}
 {{- end }}
-

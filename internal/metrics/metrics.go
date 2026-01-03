@@ -88,4 +88,3 @@ func UpdateResponseSize(size float64) {
 func UpdateBusinessMetric(metricType string, value float64) {
 	BusinessMetric.WithLabelValues(metricType).Set(value)
 }
-

@@ -73,44 +73,45 @@ echo "Step 7: Deploying monitoring stack using Helm..."
 if command -v helm >/dev/null 2>&1; then
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
     helm repo update >/dev/null 2>&1 || true
-    
+
     kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
-    
+
     helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
       --namespace monitoring \
       --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
       --set prometheus.service.type=NodePort \
       --set prometheus.service.nodePort=30090 \
       --wait --timeout=5m >/dev/null 2>&1 || echo "⚠ Prometheus installation had issues"
-    
+
     echo "Waiting for monitoring..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=2m >/dev/null 2>&1 || true
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=2m >/dev/null 2>&1 || true
     echo "✓ Monitoring deployed via Helm"
-    
+
     # Step 7a: Configure Grafana (datasource + dashboard)
     echo ""
     echo "Step 7a: Configuring Grafana..."
     if [ -f "grafana/dashboard.json" ]; then
         # Wait for Grafana to be fully ready
         sleep 5
-        
+
         # Get Grafana admin password
         GRAFANA_PASSWORD=$(kubectl get secret -n monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "prom-operator")
-        
+
         # Port forward to Grafana in background
         kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80 >/dev/null 2>&1 &
         GRAFANA_PF_PID=$!
         sleep 5
-        
+
         # Wait for Grafana API to be ready
-        for i in {1..30}; do
+        # shellcheck disable=SC2034  # Loop variable intentionally unused
+        for _ in {1..30}; do
             if curl -s -u "admin:${GRAFANA_PASSWORD}" http://localhost:3000/api/health >/dev/null 2>&1; then
                 break
             fi
             sleep 1
         done
-        
+
         # Step 7a.1: Configure Prometheus datasource
         echo "  Configuring Prometheus datasource..."
         PROMETHEUS_URL="http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
@@ -127,11 +128,11 @@ if command -v helm >/dev/null 2>&1; then
 }
 EOF
 )
-        
+
         # Check if datasource already exists
         EXISTING_DS=$(curl -s -u "admin:${GRAFANA_PASSWORD}" \
             "http://localhost:3000/api/datasources/name/Prometheus" 2>/dev/null)
-        
+
         if echo "$EXISTING_DS" | grep -q '"id"'; then
             # Update existing datasource
             DS_ID=$(echo "$EXISTING_DS" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
@@ -160,8 +161,8 @@ EOF
                 echo "  ⚠ Failed to create datasource (HTTP $DS_HTTP_CODE) - may already exist"
             fi
         fi
-        
-        
+
+
         # Step 7a.2: Import dashboard
         echo "  Importing dashboard..."
         # Prepare dashboard JSON for import (Grafana API expects dashboard object with overwrite flag)
@@ -172,14 +173,14 @@ EOF
             DASHBOARD_CONTENT=$(cat grafana/dashboard.json)
             DASHBOARD_JSON="{\"dashboard\":${DASHBOARD_CONTENT},\"overwrite\":true}"
         fi
-        
+
         # Import dashboard via API
         IMPORT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             -u "admin:${GRAFANA_PASSWORD}" \
             -H "Content-Type: application/json" \
             -d "${DASHBOARD_JSON}" \
             http://localhost:3000/api/dashboards/db 2>/dev/null)
-        
+
         HTTP_CODE=$(echo "$IMPORT_RESPONSE" | tail -n1)
         if [ "$HTTP_CODE" = "200" ]; then
             echo "  ✓ Dashboard imported successfully"
@@ -188,7 +189,7 @@ EOF
             echo "  ⚠ Dashboard import failed (HTTP $HTTP_CODE) - you can import manually later"
             DASHBOARD_IMPORTED=false
         fi
-        
+
         # Stop port forward
         kill $GRAFANA_PF_PID 2>/dev/null || true
         sleep 1
@@ -209,7 +210,8 @@ kubectl port-forward -n $NAMESPACE svc/$APP_NAME 8080:8080 >/dev/null 2>&1 &
 PF_PID=$!
 sleep 2
 
-for i in {1..100}; do
+# shellcheck disable=SC2034  # Loop variable intentionally unused
+for _ in {1..100}; do
     curl -s http://localhost:8080/ >/dev/null || true
     sleep 0.05
 done
@@ -261,4 +263,3 @@ echo ""
 echo "🧹 Cleanup:"
 echo "   kind delete cluster --name $CLUSTER_NAME"
 echo ""
-

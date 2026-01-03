@@ -8,11 +8,13 @@ This guide explains how to set up and use pre-commit hooks with a Python virtual
 - `python3` command available in PATH
 
 Check your Python version:
+
 ```bash
 python3 --version
 ```
 
 If you have Python 3.7 or lower, you need to upgrade:
+
 - **macOS**: `brew install python@3.11` or `brew install python@3.12`
 - **Linux**: `sudo apt-get install python3.8` (or higher)
 - **Windows**: Download from [python.org](https://www.python.org/downloads/)
@@ -28,6 +30,7 @@ Run the setup script to create a virtual environment and install pre-commit:
 ```
 
 This script will:
+
 - Check Python version (requires >= 3.8)
 - Create a Python virtual environment at `.venv/`
 - Install pre-commit in the virtual environment
@@ -35,6 +38,7 @@ This script will:
 - Provide usage instructions
 
 **Note**: If you previously created a `.venv/` with an older Python version, remove it first:
+
 ```bash
 rm -rf .venv
 ./scripts/setup-pre-commit.sh
@@ -100,6 +104,7 @@ make pre-commit-update   # Update hooks
 ### Pre-Commit Hooks
 
 The hooks run automatically on `git commit` when:
+
 1. Virtual environment is activated
 2. Hooks are installed (done by setup script)
 3. Files are staged for commit
@@ -107,9 +112,42 @@ The hooks run automatically on `git commit` when:
 ### Manual Execution
 
 You can also run hooks manually:
+
 - `pre-commit run` - On staged files
 - `pre-commit run --all-files` - On all files
 - `pre-commit run <hook-id>` - Specific hook
+
+## Node.js Version Requirements
+
+The `markdownlint` hook requires Node.js 14.18.0+ or 16.0.0+ (preferably 18+ LTS).
+
+**Check your Node.js version:**
+
+```bash
+node --version
+```
+
+**If you see `Error: Cannot find module 'node:fs'`, upgrade Node.js:**
+
+```bash
+# macOS (using Homebrew)
+brew upgrade node
+# or install latest LTS
+brew install node@18
+
+# Verify
+node --version
+```
+
+**After upgrading, update pre-commit cache:**
+
+```bash
+source .venv/bin/activate
+pre-commit clean
+pre-commit install
+```
+
+For detailed instructions, see [Node.js Setup Guide](./nodejs-setup.md).
 
 ## Troubleshooting
 
@@ -118,6 +156,7 @@ You can also run hooks manually:
 **Error**: `Virtual environment not found`
 
 **Solution**:
+
 ```bash
 ./scripts/setup-pre-commit.sh
 ```
@@ -127,6 +166,7 @@ You can also run hooks manually:
 **Error**: `pre-commit: command not found`
 
 **Solution**: Activate the virtual environment first:
+
 ```bash
 source .venv/bin/activate
 ```
@@ -136,6 +176,7 @@ source .venv/bin/activate
 **Issue**: Hooks don't run automatically
 
 **Solution**: Verify hooks are installed:
+
 ```bash
 source .venv/bin/activate
 pre-commit install
@@ -146,6 +187,7 @@ pre-commit install
 **Error**: `python3 is not installed`
 
 **Solution**: Install Python 3:
+
 - **macOS**: `brew install python@3.11` or `brew install python@3.12`
 - **Linux**: `sudo apt-get install python3.8` (or higher)
 - **Windows**: Download from [python.org](https://www.python.org/)
@@ -154,16 +196,33 @@ pre-commit install
 
 **Error**: `Package 'pre-commit-hooks' requires a different Python: 3.7.x not in '>=3.8'`
 
-**Solution**: 
-1. Upgrade Python to 3.8 or higher (see above)
-2. Remove the existing virtual environment:
+**Solution**:
+
+1. **Check your current Python version:**
+
+   ```bash
+   python3 --version
+   ```
+
+2. **If you have Python 3.7.x or lower, upgrade Python:**
+   - **macOS**: `brew install python@3.11` or `brew install python@3.12`
+   - **Linux**: `sudo apt-get install python3.8` (or higher)
+   - **Windows**: Download from [python.org](https://www.python.org/downloads/)
+
+3. **Remove old virtual environment and recreate:**
+
    ```bash
    rm -rf .venv
-   ```
-3. Re-run the setup script:
-   ```bash
    ./scripts/setup-pre-commit.sh
    ```
+
+4. **Temporary workaround (skip pre-commit for this commit only):**
+
+   ```bash
+   git commit --no-verify -m "your message"
+   ```
+
+   ⚠️ **Note**: This bypasses all pre-commit checks. Only use for urgent commits.
 
 The setup script now checks Python version and will fail early with a helpful error message if Python < 3.8 is detected.
 
@@ -244,4 +303,3 @@ Pre-commit hooks are also run in CI/CD:
 
 **Last Updated**: 2024  
 **Setup Script**: `scripts/setup-pre-commit.sh`
-

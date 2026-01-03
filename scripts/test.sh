@@ -22,4 +22,3 @@ if [ "${1:-}" == "e2e" ] || [ "${1:-}" == "all" ]; then
 fi
 
 echo "Tests complete!"
-

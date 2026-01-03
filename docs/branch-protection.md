@@ -5,6 +5,7 @@ This document describes how to set up branch protection for the master/main bran
 ## Overview
 
 Branch protection rules ensure that:
+
 - **No direct pushes** to the master branch
 - **Pull requests required** for all changes
 - **Code review required** before merging
@@ -44,11 +45,13 @@ make check-branch-protection-repo REPO=kubernetes/kubernetes BRANCH=main
 ```
 
 This script will:
+
 1. Check if branch protection is enabled
 2. If not, enable it with recommended settings
 3. Show current protection status
 
 **Options:**
+
 - `--show` - Show protection status (default, read-only, works on any repo)
 - `--setup` - Set up branch protection (requires write access)
 - `--branch BRANCH` - Specify branch (default: master)
@@ -56,6 +59,7 @@ This script will:
 - `--help` - Show usage information
 
 **Examples:**
+
 ```bash
 # Show protection (read-only) - shows what --setup would do
 ./scripts/branch-protect.sh --show
@@ -68,6 +72,7 @@ This script will:
 ```
 
 **What `--setup` applies:**
+
 - Require pull request reviews (1 approval)
 - Dismiss stale reviews
 - Require status checks to pass (strict mode)
@@ -77,6 +82,7 @@ This script will:
 - Block branch deletion
 
 **What `--show` displays:**
+
 - Current protection status
 - **All repository collaborators with their roles** (Read, Triage, Write, Maintain, Admin)
 - **Repository administrators** (who can modify protection rules)
@@ -92,6 +98,7 @@ This script will:
 **GitHub Roles:** See [GitHub Roles Documentation](github-roles.md) for details on all permission levels (Read, Triage, Write, Maintain, Admin).
 
 **Prerequisites:**
+
 - GitHub CLI (`gh`) installed
 - Authenticated with GitHub (`gh auth login`) - only needed for setting up protection, not for checking
 
@@ -148,6 +155,7 @@ gh api repos/deepak-muley/dm-nkp-gitops-custom-app/branches/master/protection \
 ```
 
 **Note:** The default configuration sets:
+
 - `required_approving_review_count=0` - No approvals needed (solo developers can merge their own PRs)
 - `enforce_admins=false` - Admins can bypass protection and update their own PR branches
 
@@ -176,6 +184,7 @@ git push origin master
 ```
 
 You should see an error like:
+
 ```
 ! [remote rejected] master -> master (protected branch hook declined)
 error: failed to push some refs to 'origin'
@@ -208,17 +217,20 @@ This confirms branch protection is working.
 ### Making Changes
 
 1. **Create a feature branch:**
+
    ```bash
    git checkout -b feature/my-feature
    ```
 
 2. **Make your changes and commit:**
+
    ```bash
    git add .
    git commit -m "feat: add new feature"
    ```
 
 3. **Push to your branch:**
+
    ```bash
    git push origin feature/my-feature
    ```
@@ -231,11 +243,13 @@ This confirms branch protection is working.
 ### Updating Your Own PRs (Admin)
 
 With the default configuration (`enforce_admins=false`), admins can:
+
 - **Update their own PR branches** by pushing to the feature branch
 - **Bypass protection rules** when needed (for emergency fixes)
 - Still use pull requests (recommended workflow)
 
 **Example workflow:**
+
 ```bash
 # Create a PR branch
 git checkout -b feature/my-feature
@@ -247,7 +261,8 @@ git commit --amend -m "feat: add feature (updated)"
 git push origin feature/my-feature --force-with-lease  # Works for your own PR branches
 ```
 
-**Note:** 
+**Note:**
+
 - Direct pushes to the protected branch (e.g., `master`) are still blocked for everyone, including admins
 - With 0 required approvals, you can merge your own PRs without needing someone else to approve
 - Status checks must still pass before merging
@@ -292,7 +307,8 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 ### "Required status check is missing"
 
 **Issue:** PR shows status checks as pending
-**Solution:** 
+**Solution:**
+
 - Ensure CI workflow is running
 - Check that workflow file is correct
 - Verify the status check name matches what's configured
@@ -301,6 +317,7 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 
 **Issue:** PR has requested changes that block merging
 **Solution:**
+
 - Address the review comments
 - Request a new review
 - Or dismiss the review if it's no longer relevant
@@ -309,6 +326,7 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 
 **Issue:** PR has approval but still can't merge
 **Solution:**
+
 - Check if all required status checks have passed
 - Ensure branch is up to date with master
 - Verify conversation resolution is enabled and all conversations are resolved
@@ -318,6 +336,7 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 ### Understanding "Enforce Admins"
 
 **Default Configuration (`enforce_admins=false`):**
+
 - **Admins can bypass protection rules** (suitable for solo developers)
 - Admins can update their own PR branches freely
 - Admins can push to feature branches (but not directly to protected branch)
@@ -325,6 +344,7 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 - Useful for solo developers who need to update their own PRs
 
 **Strict Configuration (`enforce_admins=true`):**
+
 - **Admins must follow all protection rules** (no bypass)
 - Admins cannot push directly to protected branches
 - Admins must use pull requests like everyone else
@@ -334,10 +354,12 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 ### Viewing Admins and Teams
 
 The `--show` command displays:
+
 - **Administrators**: Users with admin access to the repository
 - **Teams and Permissions**: Teams and their access levels (admin, push, pull, etc.)
 
 This helps you:
+
 - Understand who will be affected by protection
 - Prevent accidentally locking yourself out
 - Plan for emergency access if needed
@@ -345,12 +367,14 @@ This helps you:
 ### Preventing Admin Lockout
 
 **Before enabling `enforce_admins`:**
+
 1. Check who the admins are: `./scripts/branch-protect.sh --show`
 2. Ensure at least one admin has access to modify protection rules
 3. Consider keeping `enforce_admins` disabled if you need emergency access
 4. Or create a separate "emergency" branch that's not protected
 
 **If you get locked out:**
+
 1. If you're a repository owner, you can always modify protection via GitHub UI
 2. Repository owners can bypass protection even with `enforce_admins` enabled
 3. Organization owners can modify protection for any repo in the org
@@ -372,4 +396,3 @@ This helps you:
 - [GitHub CLI API Documentation](https://cli.github.com/manual/gh_api)
 - [GitHub Branch Protection API](https://docs.github.com/en/rest/branches/branch-protection)
 - [GitHub Roles and Permissions](github-roles.md) - Detailed explanation of all GitHub repository roles
-

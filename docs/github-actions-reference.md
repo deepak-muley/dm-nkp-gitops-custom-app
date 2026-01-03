@@ -20,7 +20,9 @@ This document describes all GitHub Actions workflows configured for this reposit
 **File:** `.github/workflows/security.yml`
 
 ### Purpose
+
 Comprehensive security scanning including:
+
 - CodeQL static analysis
 - Container image vulnerability scanning
 - SBOM generation
@@ -31,12 +33,14 @@ Comprehensive security scanning including:
 ### Jobs
 
 #### 1. CodeQL Security Analysis
+
 - **Language:** Go
 - **Frequency:** On every PR and push
 - **Output:** Security alerts in GitHub Security tab
 - **Permissions:** `security-events: write`
 
 #### 2. Container Image Vulnerability Scanning
+
 - **Tool:** Trivy
 - **Scans:** Built Docker images
 - **Output:** SARIF format uploaded to GitHub Security
@@ -44,12 +48,14 @@ Comprehensive security scanning including:
 - **Frequency:** On every PR and push
 
 #### 3. SBOM Generation
+
 - **Tool:** Syft
 - **Format:** SPDX-JSON
 - **Output:** Artifact uploaded, available for 30 days
 - **Purpose:** Software Bill of Materials for supply chain security
 
 #### 4. Dependency Review
+
 - **Tool:** GitHub Dependency Review
 - **Frequency:** On PRs only
 - **Checks:**
@@ -59,11 +65,13 @@ Comprehensive security scanning including:
 - **Fail on:** Moderate+ severity, denied licenses
 
 #### 5. License Scanning
+
 - **Tool:** FOSSA (optional)
 - **Requires:** `FOSSA_API_KEY` secret (optional)
 - **Purpose:** License compliance checking
 
 #### 6. OpenSSF Scorecard Analysis
+
 - **Tool:** OpenSSF Scorecard
 - **Frequency:** On every PR, push, and daily schedule
 - **Purpose:** Assess repository security posture and best practices
@@ -98,13 +106,16 @@ Settings → Security → Code security and analysis
 **File:** `.github/workflows/release.yml`
 
 ### Purpose
+
 Automated release creation with changelog generation.
 
 ### Triggers
+
 - **Tags:** `v*.*.*` (e.g., `v1.0.0`)
 - **Manual:** Workflow dispatch with version input
 
 ### Features
+
 - Automatic changelog generation from commits
 - Release notes with categorized changes
 - Artifact references (Docker image, Helm chart)
@@ -113,6 +124,7 @@ Automated release creation with changelog generation.
 ### Usage
 
 **Create release from tag:**
+
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
@@ -120,6 +132,7 @@ git push origin v1.0.0
 ```
 
 **Create release manually:**
+
 1. Go to Actions → Release → Run workflow
 2. Enter version (e.g., `1.0.0`)
 3. Workflow creates tag and release
@@ -129,9 +142,11 @@ git push origin v1.0.0
 **File:** `.github/workflows/stale.yml`
 
 ### Purpose
+
 Automatically mark and close stale issues and PRs.
 
 ### Configuration
+
 - **Issues:** Stale after 60 days, closed after 7 more days
 - **PRs:** Stale after 30 days, closed after 7 more days
 - **Exemptions:**
@@ -141,6 +156,7 @@ Automatically mark and close stale issues and PRs.
   - Milestoned items
 
 ### Labels
+
 - `stale` - Applied when item becomes stale
 - Auto-closed if no activity
 
@@ -149,15 +165,18 @@ Automatically mark and close stale issues and PRs.
 **File:** `.github/workflows/auto-merge.yml`
 
 ### Purpose
+
 Automatically merge Dependabot PRs when all checks pass.
 
 ### Conditions
+
 - PR author is `dependabot[bot]`
 - PR has `dependencies` label
 - All status checks pass
 - PR is mergeable
 
 ### Merge Strategy
+
 - **Method:** Squash merge
 - **Auto-merge:** Enabled automatically
 
@@ -166,22 +185,26 @@ Automatically merge Dependabot PRs when all checks pass.
 **File:** `.github/workflows/performance.yml`
 
 ### Purpose
+
 Performance and resource usage testing.
 
 ### Jobs
 
 #### 1. Load Testing
+
 - Deploys application to kind cluster
 - Runs basic load tests (100 requests)
 - Measures average response time
 - Fails if response time > 1 second
 
 #### 2. Resource Usage Monitoring
+
 - Checks Docker image size
 - Warns if image > 500MB
 - Reports resource metrics
 
 ### Frequency
+
 - Runs on PRs to `main`/`master`
 - Runs on pushes to `main`/`master`
 
@@ -190,13 +213,16 @@ Performance and resource usage testing.
 **File:** `.github/workflows/label.yml`
 
 ### Purpose
+
 Automatically label PRs and issues based on:
+
 - Files changed
 - PR size (lines changed)
 
 ### Label Categories
 
 **By Files:**
+
 - `docs` - Documentation changes
 - `ci` - CI/CD changes
 - `helm` - Helm chart changes
@@ -208,6 +234,7 @@ Automatically label PRs and issues based on:
 - `config` - Configuration changes
 
 **By Size:**
+
 - `size/XS` - 1 file changed
 - `size/S` - 2-9 files
 - `size/M` - 10-29 files
@@ -221,14 +248,17 @@ Automatically label PRs and issues based on:
 **File:** `.github/dependabot.yml`
 
 ### Purpose
+
 Automated dependency updates.
 
 ### Ecosystems Monitored
+
 - **Go modules** - Weekly updates
 - **GitHub Actions** - Weekly updates
 - **Docker** - Weekly updates
 
 ### Configuration
+
 - **Schedule:** Weekly (Mondays, 9 AM)
 - **PR Limit:** 10 for Go, 5 for Actions/Docker
 - **Labels:** `dependencies`, ecosystem-specific
@@ -238,6 +268,7 @@ Automated dependency updates.
 ## Best Practices Implemented
 
 ### 1. Security First
+
 - ✅ CodeQL scanning
 - ✅ Container vulnerability scanning
 - ✅ SBOM generation
@@ -245,17 +276,20 @@ Automated dependency updates.
 - ✅ Secret scanning
 
 ### 2. Automation
+
 - ✅ Automated releases
 - ✅ Auto-merge for dependencies
 - ✅ Auto-labeling
 - ✅ Stale management
 
 ### 3. Quality Assurance
+
 - ✅ Performance testing
 - ✅ Resource monitoring
 - ✅ Comprehensive testing (unit, integration, e2e)
 
 ### 4. Developer Experience
+
 - ✅ Clear labels
 - ✅ Automated changelogs
 - ✅ Status badges
@@ -283,6 +317,7 @@ Add these badges to your README:
 ## Permissions
 
 Workflows use minimal required permissions:
+
 - `contents: read` - Read repository
 - `contents: write` - Create releases
 - `packages: write` - Push to GHCR
@@ -293,6 +328,7 @@ Workflows use minimal required permissions:
 ## Scheduling
 
 Scheduled workflows run at:
+
 - **Security scans:** Daily at 2 AM UTC
 - **Stale management:** Daily at 2 AM UTC
 - **Dependabot:** Weekly on Mondays at 9 AM
@@ -303,6 +339,7 @@ Scheduled workflows run at:
 
 **Issue:** CodeQL or Trivy fails
 **Solution:**
+
 - Check GitHub Security tab for details
 - Review SARIF results
 - Fix identified vulnerabilities
@@ -311,6 +348,7 @@ Scheduled workflows run at:
 
 **Issue:** Dependabot PRs not auto-merging
 **Solution:**
+
 - Verify PR has `dependencies` label
 - Check all status checks pass
 - Ensure branch protection allows auto-merge
@@ -320,6 +358,7 @@ Scheduled workflows run at:
 
 **Issue:** Tag pushed but no release
 **Solution:**
+
 - Verify tag format: `v*.*.*`
 - Check workflow permissions
 - Review workflow logs
@@ -328,6 +367,7 @@ Scheduled workflows run at:
 
 **Issue:** PRs not getting labels
 **Solution:**
+
 - Verify `.github/labeler.yml` exists
 - Check workflow has `pull-requests: write` permission
 - Review workflow logs
@@ -339,4 +379,3 @@ Scheduled workflows run at:
 - [Trivy Documentation](https://aquasecurity.github.io/trivy/)
 - [Dependabot Documentation](https://docs.github.com/en/code-security/dependabot)
 - [CI/CD Pipeline Documentation](./cicd-pipeline.md)
-

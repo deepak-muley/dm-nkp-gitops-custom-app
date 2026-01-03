@@ -64,4 +64,3 @@ id_ed25519
 # Build artifacts
 dist/
 build/
-

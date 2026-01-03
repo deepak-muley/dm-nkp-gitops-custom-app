@@ -64,13 +64,15 @@ scorecard:
 ### Results
 
 **GitHub Security Tab:**
+
 - Results are uploaded as SARIF format
 - Viewable in the Security tab under "Code scanning alerts"
 - Category: `scorecard`
 
 **OpenSSF API:**
+
 - Results are published to the OpenSSF API (for public repositories)
-- Viewable at: https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app
+- Viewable at: <https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app>
 - Provides historical tracking and comparison
 
 ## Scorecard Checks
@@ -78,31 +80,37 @@ scorecard:
 Scorecard evaluates your repository against these checks:
 
 ### Security Policy
+
 - **Security-Policy:** Presence of SECURITY.md
 - **Signed-Releases:** Releases are signed
 - **Binary-Artifacts:** No binary artifacts in source
 
 ### Code Review
+
 - **Code-Review:** PRs require code review
 - **Contributors:** Multiple contributors
 - **Maintained:** Repository is actively maintained
 
 ### Branch Protection
+
 - **Branch-Protection:** Branch protection rules enabled
 - **Dangerous-Workflow:** No dangerous workflow patterns
 - **Token-Permissions:** Minimal token permissions
 
 ### Dependencies
+
 - **Dependency-Update-Tool:** Automated dependency updates
 - **Fuzzing:** Fuzzing tests present
 - **Packaging:** Proper packaging configuration
 
 ### CI/CD
+
 - **CI-Tests:** CI tests run on PRs
 - **SAST:** Static analysis in CI
 - **License:** License file present
 
 ### Vulnerabilities
+
 - **Vulnerabilities:** Known vulnerabilities addressed
 - **Pinned-Dependencies:** Dependencies are pinned
 
@@ -118,6 +126,7 @@ Scorecard evaluates your repository against these checks:
 ### In OpenSSF API
 
 For public repositories, view results at:
+
 ```
 https://api.securityscorecards.dev/projects/github.com/{owner}/{repo}
 ```
@@ -207,6 +216,7 @@ For public repositories, results are automatically published to OpenSSF API. For
 ### Scorecard Not Running
 
 **Check:**
+
 1. Workflow file exists: `.github/workflows/security.yml`
 2. Workflow is enabled in Actions tab
 3. Permissions are correctly set
@@ -214,6 +224,7 @@ For public repositories, results are automatically published to OpenSSF API. For
 ### Results Not Appearing
 
 **Check:**
+
 1. SARIF upload succeeded
 2. Security tab is enabled
 3. Code scanning is enabled in repository settings
@@ -221,20 +232,20 @@ For public repositories, results are automatically published to OpenSSF API. For
 ### Low Scores
 
 **Action:**
+
 1. Review Scorecard checks
 2. Address failing checks
 3. Re-run workflow to see improvements
 
 ## Resources
 
-- **Official Documentation:** https://github.com/ossf/scorecard
-- **Scorecard Checks:** https://github.com/ossf/scorecard/blob/main/docs/checks.md
-- **OpenSSF API:** https://api.securityscorecards.dev
-- **Best Practices Guide:** https://github.com/ossf/scorecard/blob/main/docs/checks.md
+- **Official Documentation:** <https://github.com/ossf/scorecard>
+- **Scorecard Checks:** <https://github.com/ossf/scorecard/blob/main/docs/checks.md>
+- **OpenSSF API:** <https://api.securityscorecards.dev>
+- **Best Practices Guide:** <https://github.com/ossf/scorecard/blob/main/docs/checks.md>
 
 ## Related Documentation
 
 - [Security Scanning Workflow](./github-actions-reference.md#security-scanning)
 - [Production Ready Checklist](./production-ready-checklist.md)
 - [Security Policy](../SECURITY.md)
-

@@ -120,4 +120,3 @@ prometheus:
     scrapeTimeout: 10s
     path: /metrics
     port: metrics
-

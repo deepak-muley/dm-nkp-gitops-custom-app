@@ -5,6 +5,7 @@ This guide walks you through running the complete end-to-end demo, including vie
 ## Quick Start
 
 Run the automated script:
+
 ```bash
 ./scripts/run-e2e-demo.sh
 ```
@@ -16,6 +17,7 @@ Then follow the instructions at the end to access Grafana.
 ### Prerequisites
 
 Ensure you have:
+
 - Go 1.25+
 - Docker running
 - kubectl installed
@@ -172,7 +174,8 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 ```
 
 Then:
-1. Open browser: http://localhost:3000
+
+1. Open browser: <http://localhost:3000>
 2. Login:
    - Username: `admin`
    - Password: `admin`
@@ -210,7 +213,8 @@ kubectl port-forward -n monitoring svc/prometheus 9090:9090
 ```
 
 Then:
-1. Open browser: http://localhost:9090
+
+1. Open browser: <http://localhost:9090>
 2. Go to "Status" → "Targets"
 3. Verify `dm-nkp-gitops-custom-app` target is UP
 4. Try queries:
@@ -274,12 +278,14 @@ kubectl get servicemonitor
    - Verify Prometheus is configured and working
 
 2. **Check metrics exist**:
+
    ```bash
    kubectl port-forward -n default svc/dm-nkp-gitops-custom-app 9090:9090
    curl http://localhost:9090/metrics | grep http_requests_total
    ```
 
 3. **Generate more traffic**:
+
    ```bash
    for i in {1..200}; do curl http://localhost:8080/; done
    ```
@@ -340,4 +346,3 @@ After completing all steps, you should see:
 make e2e-tests                                # Run e2e tests
 kubectl port-forward -n monitoring svc/grafana 3000:3000  # Access Grafana
 ```
-

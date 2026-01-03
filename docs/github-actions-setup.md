@@ -5,6 +5,7 @@ Complete setup guide for all GitHub Actions workflows in this repository.
 ## Overview
 
 This repository includes **8 workflows** covering:
+
 - ✅ CI/CD (build, test, deploy)
 - ✅ Security scanning (CodeQL, Trivy, SBOM)
 - ✅ Release automation
@@ -19,6 +20,7 @@ This repository includes **8 workflows** covering:
 Go to: **Settings → Security → Code security and analysis**
 
 Enable:
+
 - ✅ Dependency graph
 - ✅ Dependabot alerts
 - ✅ Dependabot security updates
@@ -29,7 +31,9 @@ Enable:
 Go to: **Settings → Secrets and variables → Actions**
 
 Add:
-- `CODECOV_TOKEN` - Get from https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app
+
+- `CODECOV_TOKEN` - Get from <https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app>
+- (Optional) `GITHUB_PAT` - Personal Access Token with `write:packages` permission (for CD workflow to push to GHCR)
 - (Optional) `FOSSA_API_KEY` - For license scanning
 
 ### 3. Verify Workflows
@@ -43,6 +47,7 @@ Add:
 ### Security Scanning Setup
 
 #### CodeQL
+
 1. **Automatic:** Enabled via workflow
 2. **Manual Setup:**
    - Settings → Security → Code scanning
@@ -50,11 +55,13 @@ Add:
    - Select language: Go
 
 #### Container Scanning (Trivy)
+
 - **Automatic:** Runs in security workflow
 - **Results:** Uploaded to GitHub Security tab
 - **Format:** SARIF
 
 #### SBOM Generation
+
 - **Automatic:** Generated in security workflow
 - **Format:** SPDX-JSON
 - **Storage:** GitHub Actions artifacts (30 days)
@@ -64,11 +71,13 @@ Add:
 **File:** `.github/dependabot.yml`
 
 **Already configured for:**
+
 - Go modules (weekly)
 - GitHub Actions (weekly)
 - Docker images (weekly)
 
 **Customization:**
+
 - Edit `.github/dependabot.yml`
 - Adjust schedule, labels, reviewers
 
@@ -77,6 +86,7 @@ Add:
 **File:** `.github/workflows/release.yml`
 
 **Automatic releases:**
+
 ```bash
 # Create and push a version tag
 git tag v1.0.0
@@ -85,6 +95,7 @@ git push origin v1.0.0
 ```
 
 **Manual releases:**
+
 1. Go to Actions → Release
 2. Click "Run workflow"
 3. Enter version (e.g., `1.0.0`)
@@ -94,23 +105,27 @@ git push origin v1.0.0
 **File:** `.github/workflows/auto-merge.yml`
 
 **Requirements:**
+
 - Branch protection must allow auto-merge
 - PR must have `dependencies` label
 - All status checks must pass
 
 **Enable in branch protection:**
+
 - Settings → Branches → master
 - Enable "Allow auto-merge"
 
 ### Label Management Setup
 
 **Files:**
+
 - `.github/labeler.yml` - File-based labels
 - Size-based labeling (implemented via GitHub script in label.yml workflow)
 
 **Automatic:** Labels applied on PR creation
 
 **Customization:**
+
 - Edit labeler config files
 - Add/remove label patterns
 
@@ -119,11 +134,13 @@ git push origin v1.0.0
 ### Viewing Workflow Status
 
 **In Repository:**
+
 - Actions tab → View all runs
 - Security tab → View security scans
 - Dependencies tab → View dependency updates
 
 **In PRs:**
+
 - Status checks show at bottom of PR
 - Codecov comment shows coverage
 - Security alerts show in Security tab
@@ -159,6 +176,7 @@ After setup, verify:
 ### Workflows Not Running
 
 **Check:**
+
 1. Workflow files are in `.github/workflows/`
 2. YAML syntax is valid
 3. Workflow is enabled in Actions tab
@@ -167,6 +185,7 @@ After setup, verify:
 ### Security Scans Not Appearing
 
 **Check:**
+
 1. Security features enabled in Settings
 2. CodeQL enabled in Security tab
 3. Workflow has correct permissions
@@ -175,6 +194,7 @@ After setup, verify:
 ### Dependabot Not Creating PRs
 
 **Check:**
+
 1. `.github/dependabot.yml` exists
 2. Dependabot enabled in Settings
 3. Repository has dependencies
@@ -183,6 +203,7 @@ After setup, verify:
 ### Auto-merge Not Working
 
 **Check:**
+
 1. Branch protection allows auto-merge
 2. PR has `dependencies` label
 3. All status checks pass
@@ -193,6 +214,7 @@ After setup, verify:
 ### Customize Security Scans
 
 Edit `.github/workflows/security.yml`:
+
 - Adjust Trivy severity levels
 - Change SBOM format
 - Add custom security tools
@@ -200,6 +222,7 @@ Edit `.github/workflows/security.yml`:
 ### Customize Release Process
 
 Edit `.github/workflows/release.yml`:
+
 - Change changelog format
 - Add release artifacts
 - Customize release notes
@@ -207,6 +230,7 @@ Edit `.github/workflows/release.yml`:
 ### Customize Labels
 
 Edit `.github/labeler.yml`:
+
 - Add new label patterns
 - Change label names
 - Adjust file matching rules
@@ -214,11 +238,13 @@ Edit `.github/labeler.yml`:
 ## Monitoring and Maintenance
 
 ### Weekly Tasks
+
 - Review Dependabot PRs
 - Check security alerts
 - Review stale issues/PRs
 
 ### Monthly Tasks
+
 - Review workflow performance
 - Update workflow actions
 - Review and adjust configurations
@@ -230,4 +256,3 @@ Edit `.github/labeler.yml`:
 - [Dependabot Documentation](https://docs.github.com/en/code-security/dependabot)
 - [Workflow Reference](./github-actions-reference.md)
 - [CI/CD Pipeline](./cicd-pipeline.md)
-

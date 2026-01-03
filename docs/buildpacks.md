@@ -92,6 +92,7 @@ id = "dm-nkp-gitops-custom-app"
 When you run `make docker-build` or `pack build`, the following happens:
 
 1. **Detection**: Buildpack detects Go application
+
    ```bash
    # Buildpack checks for:
    - go.mod file
@@ -100,6 +101,7 @@ When you run `make docker-build` or `pack build`, the following happens:
    ```
 
 2. **Build**: Compiles the Go application
+
    ```bash
    # Buildpack runs:
    - go mod download
@@ -107,6 +109,7 @@ When you run `make docker-build` or `pack build`, the following happens:
    ```
 
 3. **Export**: Creates distroless image
+
    ```bash
    # Final image contains:
    - Distroless base (gcr.io/distroless/static:nonroot)
@@ -119,12 +122,14 @@ When you run `make docker-build` or `pack build`, the following happens:
 This project uses Google's buildpacks (`gcr.io/buildpacks/builder:google-22`):
 
 **Features:**
+
 - Optimized for Google Cloud Platform
 - Supports multiple languages (Go, Node.js, Python, Java, etc.)
 - Automatic security updates
 - Distroless base images
 
 **Go Buildpack Capabilities:**
+
 - Automatic Go version detection
 - Dependency caching
 - Multi-stage builds
@@ -192,11 +197,13 @@ ENTRYPOINT ["/app"]
 ```
 
 **Pros:**
+
 - Full control over build process
 - Explicit dependencies
 - Customizable
 
 **Cons:**
+
 - More code to maintain
 - Security updates require manual intervention
 - Larger images if not optimized
@@ -208,6 +215,7 @@ pack build app --builder gcr.io/buildpacks/builder:google-22
 ```
 
 **Pros:**
+
 - Automatic optimization
 - Security updates handled by buildpack maintainers
 - Smaller images
@@ -215,6 +223,7 @@ pack build app --builder gcr.io/buildpacks/builder:google-22
 - Less code to maintain
 
 **Cons:**
+
 - Less control over build process
 - Requires understanding of buildpack configuration
 
@@ -389,4 +398,3 @@ Buildpacks provide a modern, secure, and efficient way to build container images
 - Provide consistent builds across environments
 
 The project includes both buildpacks (recommended) and Dockerfile (alternative) approaches, giving you flexibility while defaulting to the best practice.
-

@@ -5,12 +5,14 @@ This document verifies that all requirements are met for the CI/CD pipeline.
 ## ✅ Completed Requirements
 
 ### 1. Local Development Workflow
+
 - ✅ Users can build Helm chart locally: `make helm-chart`
 - ✅ Users can build Docker image locally: `make docker-build`
 - ✅ Users can run e2e tests locally: `make e2e-tests`
 - ✅ All local commands documented in Makefile and docs
 
 ### 2. PR Workflow (CI)
+
 - ✅ CI runs on ALL pull requests (any target branch)
 - ✅ CI builds Docker image (test build, not pushed)
 - ✅ CI packages Helm chart
@@ -20,6 +22,7 @@ This document verifies that all requirements are met for the CI/CD pipeline.
 - ✅ CI runs security scans (kubesec)
 
 ### 3. Code Coverage
+
 - ✅ Codecov integration configured
 - ✅ Coverage reports uploaded to Codecov
 - ✅ Codecov bot comments on PRs
@@ -27,6 +30,7 @@ This document verifies that all requirements are met for the CI/CD pipeline.
 - ✅ `codecov.yml` configuration file created
 
 ### 4. Master Branch Workflow (CD)
+
 - ✅ CD runs only on pushes to master (not PRs)
 - ✅ CD builds Docker image from master branch
 - ✅ CD signs Docker image with cosign
@@ -36,6 +40,7 @@ This document verifies that all requirements are met for the CI/CD pipeline.
 - ✅ CD runs e2e tests using production artifacts from GHCR
 
 ### 5. Documentation
+
 - ✅ Comprehensive CI/CD pipeline documentation created
 - ✅ Workflow diagrams included
 - ✅ Troubleshooting guide included
@@ -48,7 +53,7 @@ This document verifies that all requirements are met for the CI/CD pipeline.
 You need to set up the following secret in GitHub:
 
 1. **CODECOV_TOKEN**
-   - Go to: https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app/settings
+   - Go to: <https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app/settings>
    - Copy the repository upload token
    - Add to GitHub Secrets: Settings → Secrets and variables → Actions → New repository secret
    - Name: `CODECOV_TOKEN`
@@ -57,7 +62,7 @@ You need to set up the following secret in GitHub:
 ### Codecov Setup
 
 1. **Enable Codecov for Repository**
-   - Visit: https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app
+   - Visit: <https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app>
    - Sign in with GitHub
    - Enable the repository
    - Copy the upload token
@@ -70,6 +75,7 @@ You need to set up the following secret in GitHub:
 ## 🔍 Verification Steps
 
 ### Test Local Development
+
 ```bash
 # 1. Build Helm chart
 make helm-chart
@@ -85,6 +91,7 @@ make e2e-tests
 ```
 
 ### Test PR Workflow
+
 1. Create a test PR from `dev` to `master`
 2. Verify CI runs automatically
 3. Check that all jobs pass:
@@ -98,6 +105,7 @@ make e2e-tests
 5. Check PR status checks show Codecov
 
 ### Test Master Workflow
+
 1. Merge PR to master
 2. Verify CD runs automatically
 3. Check that jobs pass:
@@ -110,6 +118,7 @@ make e2e-tests
 ## 📋 Workflow Summary
 
 ### On PR Creation
+
 ```
 PR Created
   ↓
@@ -130,6 +139,7 @@ All checks pass → Ready to merge
 ```
 
 ### On Merge to Master
+
 ```
 Merge to Master
   ↓
@@ -188,10 +198,12 @@ Production artifacts verified ✅
 ### Codecov Not Showing in PR
 
 **Symptoms:**
+
 - No Codecov comment in PR
 - No Codecov status check
 
 **Solutions:**
+
 1. Verify `CODECOV_TOKEN` secret is set
 2. Check Codecov repository is enabled
 3. Verify `codecov.yml` exists in repo root
@@ -201,9 +213,11 @@ Production artifacts verified ✅
 ### E2E Tests Fail
 
 **Symptoms:**
+
 - E2E job fails in CI or CD
 
 **Solutions:**
+
 1. Check if kind cluster is created successfully
 2. Verify Docker image builds correctly
 3. Check Helm chart is packaged correctly
@@ -213,9 +227,11 @@ Production artifacts verified ✅
 ### CD Doesn't Run on Master
 
 **Symptoms:**
+
 - No CD workflow triggered after merge
 
 **Solutions:**
+
 1. Verify branch is `master` (not `main`)
 2. Check workflow file: `.github/workflows/cd.yml`
 3. Verify workflow is enabled in Actions tab
@@ -238,6 +254,7 @@ Before considering the pipeline complete:
 ## 🚀 Next Steps
 
 1. **Set up Codecov:**
+
    ```bash
    # Visit https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app
    # Enable repository and get token
@@ -245,6 +262,7 @@ Before considering the pipeline complete:
    ```
 
 2. **Test the Pipeline:**
+
    ```bash
    # Create a test PR
    git checkout -b test/ci-pipeline
@@ -262,8 +280,8 @@ Before considering the pipeline complete:
 ## 📞 Support
 
 If you encounter issues:
+
 1. Check workflow logs in GitHub Actions
 2. Review documentation in `docs/cicd-pipeline.md`
 3. Check troubleshooting section above
 4. Verify all secrets are configured correctly
-

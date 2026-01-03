@@ -85,18 +85,21 @@ make kubesec-helm
 ## Troubleshooting
 
 **Build fails?**
+
 ```bash
 go mod tidy
 make clean && make build
 ```
 
 **Docker build fails?**
+
 ```bash
 docker system prune -f
 docker build --no-cache -t test .
 ```
 
 **Pack build fails?**
+
 ```bash
 pack builder suggest
 pack build test --clear-cache
@@ -105,4 +108,3 @@ pack build test --clear-cache
 ## Next Steps
 
 See [docs/verification.md](docs/verification.md) for detailed verification steps.
-

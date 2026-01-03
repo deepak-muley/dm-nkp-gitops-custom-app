@@ -36,7 +36,7 @@ var _ = Describe("Server", func() {
 	AfterEach(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	})
 
 	Describe("Server creation", func() {
@@ -51,7 +51,7 @@ var _ = Describe("Server", func() {
 			// Clean up
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			testSrv.Shutdown(ctx)
+			_ = testSrv.Shutdown(ctx)
 		})
 	})
 
@@ -124,30 +124,30 @@ var _ = Describe("Server", func() {
 		It("should handle metrics server error in goroutine", func() {
 			// Create a server that will have a conflict to trigger error path
 			testSrv := New("8084", "9094")
-			
+
 			// Start it first to reserve the port
 			go func() {
 				_ = testSrv.Start()
 			}()
 			time.Sleep(50 * time.Millisecond)
-			
+
 			// Create another server trying to use same metrics port
 			conflictingSrv := &Server{
-				httpServer: &http.Server{Addr: ":8085"},
+				httpServer:    &http.Server{Addr: ":8085"},
 				metricsServer: &http.Server{Addr: ":9094"}, // Same as testSrv
 			}
-			
+
 			// This will trigger the error path in the goroutine
 			go func() {
 				_ = conflictingSrv.Start()
 			}()
 			time.Sleep(100 * time.Millisecond)
-			
+
 			// Clean up
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			testSrv.Shutdown(ctx)
-			conflictingSrv.Shutdown(ctx)
+			_ = testSrv.Shutdown(ctx)
+			_ = conflictingSrv.Shutdown(ctx)
 		})
 	})
 
@@ -195,19 +195,19 @@ var _ = Describe("Server", func() {
 		It("should handle shutdown error when httpServer fails after metricsServer error", func() {
 			// Use mocks to test the error path where both shutdowns fail
 			// This tests the branch where err != nil when httpServer.Shutdown is called
-			
+
 			// Create mock shutdowners that return errors
 			mockMetricsShutdowner := &mockShutdowner{err: fmt.Errorf("metrics shutdown error")}
 			mockHttpShutdowner := &mockShutdowner{err: fmt.Errorf("http shutdown error")}
-			
+
 			testSrv := &Server{
 				metricsShutdowner: mockMetricsShutdowner,
 				httpShutdowner:    mockHttpShutdowner,
 			}
-			
+
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			
+
 			// This should return the first error (metrics server error)
 			// and exercise the path where err != nil when httpServer.Shutdown is called
 			err := testSrv.Shutdown(ctx)
@@ -218,18 +218,18 @@ var _ = Describe("Server", func() {
 		It("should handle shutdown error when only httpServer fails", func() {
 			// Test the path where metricsServer succeeds but httpServer fails
 			// This tests the branch where err == nil when httpServer.Shutdown is called
-			
+
 			mockMetricsShutdowner := &mockShutdowner{err: nil} // Success
 			mockHttpShutdowner := &mockShutdowner{err: fmt.Errorf("http shutdown error")}
-			
+
 			testSrv := &Server{
 				metricsShutdowner: mockMetricsShutdowner,
 				httpShutdowner:    mockHttpShutdowner,
 			}
-			
+
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			
+
 			// This should return the http server error
 			err := testSrv.Shutdown(ctx)
 			Expect(err).NotTo(BeNil())

@@ -11,6 +11,7 @@ Unit tests test individual components in isolation without external dependencies
 **Location**: `internal/*/*_test.go`
 
 **Run**:
+
 ```bash
 make unit-tests
 ```
@@ -24,11 +25,13 @@ Integration tests test components working together, typically requiring a runnin
 **Location**: `tests/integration/`
 
 **Run**:
+
 ```bash
 make integration-tests
 ```
 
-**Requirements**: 
+**Requirements**:
+
 - No external dependencies (server starts in test)
 - Tests actual HTTP endpoints
 - Verifies metrics endpoint
@@ -40,11 +43,13 @@ E2E tests test the complete application in a real environment (Kubernetes cluste
 **Location**: `tests/e2e/`
 
 **Run**:
+
 ```bash
 make e2e-tests
 ```
 
 **Requirements**:
+
 - `kind` installed
 - `kubectl` configured
 - `curl` available
@@ -93,6 +98,7 @@ go test -v -run TestSpecificTest ./internal/metrics/...
 ## Test Framework
 
 The project uses:
+
 - **Ginkgo**: BDD-style testing framework
 - **Gomega**: Matcher library for assertions
 
@@ -178,12 +184,14 @@ dlv test ./internal/metrics/
 ## Integration Test Details
 
 Integration tests:
+
 - Start a real HTTP server
 - Make actual HTTP requests
 - Verify responses and metrics
 - Clean up after tests
 
 Example:
+
 ```go
 BeforeEach(func() {
     srv = server.New("8080", "9090")
@@ -199,12 +207,14 @@ AfterEach(func() {
 ## E2E Test Details
 
 E2E tests:
+
 - Build the application binary
 - Start the application
 - Test endpoints
 - Optionally test Kubernetes deployment
 
 Requirements:
+
 - `kind` for local Kubernetes cluster
 - `kubectl` for cluster interaction
 - `curl` for HTTP requests
@@ -237,4 +247,3 @@ Requirements:
 - Verify `kind` is installed: `kind version`
 - Check `kubectl` is configured: `kubectl cluster-info`
 - Ensure `curl` is available: `which curl`
-

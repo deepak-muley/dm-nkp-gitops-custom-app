@@ -558,4 +558,3 @@ pre-commit-update: ## Update pre-commit hooks (requires venv activation: source 
 	@pre-commit autoupdate
 
 all: clean deps lint build test ## Run all: clean, deps, lint, build, test
-

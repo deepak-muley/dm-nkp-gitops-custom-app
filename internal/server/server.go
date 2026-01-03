@@ -63,7 +63,7 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	var err error
-	
+
 	// Use test hook if set, otherwise use real server
 	var metricsShutdownErr error
 	if s.metricsShutdowner != nil {
@@ -72,7 +72,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		metricsShutdownErr = s.metricsServer.Shutdown(ctx)
 	}
 	err = metricsShutdownErr
-	
+
 	// Use test hook if set, otherwise use real server
 	var httpShutdownErr error
 	if s.httpShutdowner != nil {
@@ -80,7 +80,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	} else if s.httpServer != nil {
 		httpShutdownErr = s.httpServer.Shutdown(ctx)
 	}
-	
+
 	if httpShutdownErr != nil {
 		if err == nil {
 			err = httpShutdownErr
@@ -101,18 +101,17 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	}()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"message": "Hello from dm-nkp-gitops-custom-app", "version": "0.1.0"}`)
+	_, _ = fmt.Fprintf(w, `{"message": "Hello from dm-nkp-gitops-custom-app", "version": "0.1.0"}`)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status": "healthy"}`)
+	_, _ = fmt.Fprintf(w, `{"status": "healthy"}`)
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status": "ready"}`)
+	_, _ = fmt.Fprintf(w, `{"status": "ready"}`)
 }
-

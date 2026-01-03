@@ -7,6 +7,7 @@ This document describes the complete CI/CD pipeline for `dm-nkp-gitops-custom-ap
 ## Overview
 
 The CI/CD pipeline ensures that:
+
 - All code changes are tested before merging
 - Docker images and Helm charts are built and validated
 - E2E tests run against built artifacts
@@ -109,6 +110,7 @@ git push origin feature/my-feature
 ### Jobs
 
 #### 1. `test` Job
+
 - **Purpose:** Run unit tests, integration tests, linting, and security checks
 - **Steps:**
   - Set up Go environment
@@ -120,11 +122,13 @@ git push origin feature/my-feature
   - Upload coverage to Codecov
 
 **Codecov Integration:**
+
 - Coverage reports are uploaded to Codecov
 - Codecov bot comments on PRs with coverage changes
 - Coverage badge appears in PR status checks
 
 #### 2. `docker-build` Job
+
 - **Purpose:** Build Docker image to verify it builds correctly
 - **Dependencies:** `test` job must pass
 - **Steps:**
@@ -134,6 +138,7 @@ git push origin feature/my-feature
   - **Note:** Image is NOT pushed to registry (test only)
 
 #### 3. `helm` Job
+
 - **Purpose:** Package and validate Helm chart
 - **Dependencies:** `test` job must pass
 - **Steps:**
@@ -144,6 +149,7 @@ git push origin feature/my-feature
   - Upload chart as artifact for e2e tests
 
 #### 4. `build` Job
+
 - **Purpose:** Build Go binary
 - **Dependencies:** `test` job must pass
 - **Steps:**
@@ -151,6 +157,7 @@ git push origin feature/my-feature
   - Upload binary as artifact
 
 #### 5. `e2e` Job
+
 - **Purpose:** Run end-to-end tests using built Docker image and Helm chart
 - **Dependencies:** `docker-build` and `helm` jobs must pass
 - **Steps:**
@@ -163,6 +170,7 @@ git push origin feature/my-feature
   - Tests verify application functionality
 
 **E2E Test Coverage:**
+
 - Application deployment to Kubernetes
 - Health check endpoints
 - Metrics endpoint
@@ -170,6 +178,7 @@ git push origin feature/my-feature
 - Monitoring integration (Prometheus/Grafana)
 
 #### 6. `kubesec` Job
+
 - **Purpose:** Security scanning of Kubernetes manifests
 - **Dependencies:** `test` job must pass
 - **Steps:**
@@ -185,6 +194,7 @@ git push origin feature/my-feature
 ### Status Checks
 
 All jobs must pass before PR can be merged:
+
 - ✅ `test` - Unit/integration tests pass
 - ✅ `docker-build` - Docker image builds
 - ✅ `helm` - Helm chart packages and validates
@@ -201,6 +211,7 @@ All jobs must pass before PR can be merged:
 ### Jobs
 
 #### 1. `build-and-push` Job
+
 - **Purpose:** Build, sign, and push production artifacts to GHCR
 - **Steps:**
   - Set up Docker Buildx
@@ -213,15 +224,18 @@ All jobs must pass before PR can be merged:
   - Push Helm chart to GHCR
 
 **Versioning:**
+
 - Docker images: `0.1.0-sha-abc1234` (uses `-` because Docker tags don't allow `+`)
 - Helm charts: `0.1.0+sha-abc1234` (uses `+` per SemVer build metadata)
 
 **Image Signing:**
+
 - Images are signed using cosign keyless signing
 - Signatures provide authenticity and integrity verification
 - See [Image Signing Documentation](./image-signing.md) for details
 
 #### 2. `e2e` Job
+
 - **Purpose:** Run e2e tests against production artifacts from GHCR
 - **Dependencies:** `build-and-push` job must complete
 - **Steps:**
@@ -233,6 +247,7 @@ All jobs must pass before PR can be merged:
   - Verify production artifacts work correctly in Kubernetes
 
 **Why E2E After Push?**
+
 - Validates that artifacts pushed to GHCR are functional
 - Ensures production-ready artifacts work in real environment
 - Catches any issues with artifact publishing
@@ -242,22 +257,26 @@ All jobs must pass before PR can be merged:
 ### Codecov Integration
 
 **Configuration:**
+
 - Coverage reports are uploaded in the `test` job
 - Codecov token stored in `secrets.CODECOV_TOKEN`
 - Coverage file: `coverage/unit-coverage.out`
 
 **PR Integration:**
+
 - Codecov bot automatically comments on PRs
 - Shows coverage changes (increase/decrease)
 - Displays coverage percentage
 - Highlights uncovered lines
 
 **Viewing Coverage:**
+
 1. Check PR comments for Codecov report
 2. Click "Details" link in PR status checks
 3. View full report on codecov.io
 
 **Coverage Target:**
+
 - Aim for >80% coverage for production code
 - Critical paths should have 100% coverage
 
@@ -286,12 +305,13 @@ All jobs must pass before PR can be merged:
 ### GitHub Secrets
 
 - `CODECOV_TOKEN` - Codecov upload token
-  - Get from: https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app/settings
+  - Get from: <https://codecov.io/gh/deepak-muley/dm-nkp-gitops-custom-app/settings>
   - Required for: Coverage reporting in PRs
 
 ### GitHub Permissions
 
 The workflows require the following permissions:
+
 - `contents: read` - Read repository contents
 - `packages: write` - Push to GHCR
 - `id-token: write` - For keyless signing with cosign
@@ -301,19 +321,24 @@ The workflows require the following permissions:
 ### CI Fails on PR
 
 **Issue:** Tests fail
+
 - **Solution:** Check test output, fix failing tests locally first
 
 **Issue:** Docker build fails
+
 - **Solution:** Verify Dockerfile/buildpacks configuration, test locally
 
 **Issue:** Helm chart validation fails
+
 - **Solution:** Run `helm lint` and `helm template` locally
 
 **Issue:** E2E tests fail
+
 - **Solution:** Check Kubernetes setup, verify image builds correctly
 
 **Issue:** Codecov not showing in PR
-- **Solution:** 
+
+- **Solution:**
   - Verify `CODECOV_TOKEN` secret is set
   - Check Codecov project settings
   - Ensure coverage file is generated correctly
@@ -321,12 +346,15 @@ The workflows require the following permissions:
 ### CD Fails on Master
 
 **Issue:** Image push fails
+
 - **Solution:** Check GHCR permissions, verify `GITHUB_TOKEN` has write access
 
 **Issue:** Image signing fails
+
 - **Solution:** Verify `id-token: write` permission is set
 
 **Issue:** E2E tests fail with production artifacts
+
 - **Solution:** Check if artifacts were pushed correctly, verify image/chart versions
 
 ## Best Practices
@@ -367,6 +395,7 @@ The workflows require the following permissions:
 ## Quick Reference
 
 ### Local Development
+
 ```bash
 make helm-chart      # Build Helm chart
 make docker-build    # Build Docker image
@@ -375,6 +404,7 @@ make e2e-tests       # Run e2e tests
 ```
 
 ### CI Commands (in workflows)
+
 ```bash
 make deps            # Download dependencies
 make check-secrets   # Check for secrets
@@ -386,10 +416,10 @@ make helm-chart      # Package Helm chart
 ```
 
 ### CD Commands (in workflows)
+
 ```bash
 pack build           # Build Docker image
 cosign sign          # Sign Docker image
 helm package         # Package Helm chart
 helm push            # Push Helm chart to OCI registry
 ```
-

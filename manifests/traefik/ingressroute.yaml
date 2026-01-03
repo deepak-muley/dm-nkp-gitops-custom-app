@@ -31,4 +31,3 @@ spec:
       services:
         - name: dm-nkp-gitops-custom-app
           port: 9090
-

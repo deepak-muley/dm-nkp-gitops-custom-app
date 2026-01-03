@@ -14,31 +14,73 @@ PRE_COMMIT_CONFIG="$REPO_ROOT/.pre-commit-config.yaml"
 echo "Setting up pre-commit hooks with Python virtual environment..."
 echo ""
 
-# Check if Python 3 is available
-if ! command -v python3 &> /dev/null; then
-    echo "Error: python3 is not installed"
-    echo "Please install Python 3 to use pre-commit hooks"
-    exit 1
+# Function to check Python version
+check_python_version() {
+    local python_cmd="$1"
+    if ! command -v "$python_cmd" &> /dev/null; then
+        return 1
+    fi
+    local version
+    local major
+    local minor
+    version=$("$python_cmd" --version 2>&1 | awk '{print $2}')
+    major=$(echo "$version" | cut -d. -f1)
+    minor=$(echo "$version" | cut -d. -f2)
+    if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+        echo "$version"
+        return 0
+    fi
+    return 1
+}
+
+# Try to find a compatible Python version
+PYTHON_CMD="python3"
+PYTHON_VERSION=""
+
+# First, try the default python3
+if version=$(check_python_version "python3"); then
+    PYTHON_VERSION="$version"
+    echo "Found compatible Python: python3 ($PYTHON_VERSION)"
+else
+    # Try common Homebrew Python locations (macOS)
+    echo "Default python3 is too old, searching for newer version..."
+    for python_path in \
+        "/usr/local/opt/python@3.14/bin/python3" \
+        "/opt/homebrew/opt/python@3.14/bin/python3" \
+        "/usr/local/opt/python@3.12/bin/python3" \
+        "/opt/homebrew/opt/python@3.12/bin/python3" \
+        "/usr/local/opt/python@3.11/bin/python3" \
+        "/opt/homebrew/opt/python@3.11/bin/python3" \
+        "/usr/local/opt/python@3.10/bin/python3" \
+        "/opt/homebrew/opt/python@3.10/bin/python3" \
+        "/usr/local/opt/python@3.9/bin/python3" \
+        "/opt/homebrew/opt/python@3.9/bin/python3" \
+        "/usr/local/opt/python@3.8/bin/python3" \
+        "/opt/homebrew/opt/python@3.8/bin/python3" \
+        "/usr/bin/python3"; do
+        if [ -f "$python_path" ] && version=$(check_python_version "$python_path"); then
+            PYTHON_CMD="$python_path"
+            PYTHON_VERSION="$version"
+            echo "Found compatible Python: $python_path ($PYTHON_VERSION)"
+            break
+        fi
+    done
 fi
 
-# Check Python version (pre-commit requires Python >= 3.8)
-PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
-PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
-
-if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
+# If still no compatible Python found, show error
+if [ -z "$PYTHON_VERSION" ]; then
     echo "Error: Python 3.8 or higher is required"
-    echo "Current version: Python $PYTHON_VERSION"
+    echo "Current default version: $(python3 --version 2>&1 | awk '{print $2}')"
     echo "pre-commit-hooks requires Python >= 3.8"
     echo ""
-    echo "Please upgrade Python:"
+    echo "Please install a newer Python version:"
     echo "  macOS: brew install python@3.11"
     echo "  Linux: sudo apt-get install python3.8 (or higher)"
     echo "  Or download from: https://www.python.org/downloads/"
     exit 1
 fi
 
-echo "Python version check: $PYTHON_VERSION (✓ compatible)"
+echo "Using Python: $PYTHON_CMD ($PYTHON_VERSION)"
 
 # Check if .pre-commit-config.yaml exists
 if [ ! -f "$PRE_COMMIT_CONFIG" ]; then
@@ -50,7 +92,7 @@ fi
 # Create virtual environment if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv "$VENV_DIR"
+    "$PYTHON_CMD" -m venv "$VENV_DIR"
     echo "✓ Virtual environment created at: $VENV_DIR"
 else
     echo "✓ Virtual environment already exists at: $VENV_DIR"
@@ -119,4 +161,3 @@ echo "Tip: Add this to your .gitignore (if not already there):"
 echo "   .venv/"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-

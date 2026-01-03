@@ -22,4 +22,3 @@ if [ -f "${BUILD_DIR}/${APP_NAME}" ]; then
     echo "Binary size: $(du -h ${BUILD_DIR}/${APP_NAME} | cut -f1)"
     file ${BUILD_DIR}/${APP_NAME}
 fi
-

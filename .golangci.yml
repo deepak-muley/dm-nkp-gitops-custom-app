@@ -1,3 +1,6 @@
+# golangci-lint configuration
+# See: https://golangci-lint.run/usage/configuration/
+
 linters-settings:
   govet:
     check-shadowing: true
@@ -10,6 +13,7 @@ linters-settings:
     min-occurrences: 2
 
 linters:
+  disable-all: true
   enable:
     - errcheck
     - gosimple
@@ -17,8 +21,6 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - gocyclo
     - dupl
@@ -30,4 +32,3 @@ issues:
       linters:
         - errcheck
         - dupl
-

@@ -60,4 +60,3 @@ echo ""
 echo "📋 Create HTTPRoute:"
 echo "  kubectl apply -f manifests/gateway-api/httproute.yaml"
 echo ""
-

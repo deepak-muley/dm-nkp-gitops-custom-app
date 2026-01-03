@@ -14,6 +14,7 @@ Both folders contain Kubernetes YAML manifests, but they serve different purpose
 ### 1. **Static vs Dynamic**
 
 #### `manifests/` - Static YAML
+
 ```yaml
 # manifests/base/deployment.yaml
 apiVersion: apps/v1
@@ -27,6 +28,7 @@ spec:
 ```
 
 **Characteristics:**
+
 - ✅ Simple and straightforward
 - ✅ Direct `kubectl apply`
 - ❌ No customization without editing files
@@ -34,6 +36,7 @@ spec:
 - ❌ Values are hard-coded
 
 #### `chart/templates/` - Dynamic Templates
+
 ```yaml
 # chart/templates/deployment.yaml
 apiVersion: apps/v1
@@ -49,6 +52,7 @@ spec:
 ```
 
 **Characteristics:**
+
 - ✅ Highly customizable via `values.yaml`
 - ✅ Supports multiple environments (dev, staging, prod)
 - ✅ Template functions and conditionals
@@ -58,6 +62,7 @@ spec:
 ### 2. **Usage**
 
 #### Using `manifests/`
+
 ```bash
 # Direct application - no processing needed
 kubectl apply -f manifests/base/
@@ -67,6 +72,7 @@ envsubst < manifests/gateway-api/httproute-template.yaml | kubectl apply -f -
 ```
 
 #### Using `chart/templates/`
+
 ```bash
 # Render templates with Helm
 helm template my-release chart/dm-nkp-gitops-custom-app
@@ -81,6 +87,7 @@ helm upgrade my-app chart/dm-nkp-gitops-custom-app --set replicaCount=5
 ### 3. **Customization**
 
 #### `manifests/` - Limited Customization
+
 ```bash
 # Option 1: Edit files directly
 vim manifests/base/deployment.yaml
@@ -95,6 +102,7 @@ kubectl apply -k manifests/overlays/production/
 ```
 
 #### `chart/templates/` - Rich Customization
+
 ```bash
 # Option 1: Use values.yaml
 helm install my-app chart/ -f values.yaml
@@ -113,6 +121,7 @@ helm install my-app chart/ -f values-prod.yaml
 ### 4. **File Structure**
 
 #### `manifests/` Structure
+
 ```
 manifests/
 ├── base/                    # Base Kubernetes resources
@@ -126,6 +135,7 @@ manifests/
 ```
 
 #### `chart/templates/` Structure
+
 ```
 chart/dm-nkp-gitops-custom-app/
 ├── Chart.yaml              # Chart metadata
@@ -141,7 +151,8 @@ chart/dm-nkp-gitops-custom-app/
 
 ### 5. **When to Use Each**
 
-#### Use `manifests/` when:
+#### Use `manifests/` when
+
 - ✅ Simple deployments with fixed values
 - ✅ Quick testing and development
 - ✅ One-off deployments
@@ -150,7 +161,8 @@ chart/dm-nkp-gitops-custom-app/
 - ✅ CI/CD uses raw YAML
 - ✅ GitOps tools (ArgoCD, Flux) that work with raw YAML
 
-#### Use `chart/templates/` when:
+#### Use `chart/templates/` when
+
 - ✅ Production deployments
 - ✅ Multiple environments (dev, staging, prod)
 - ✅ Need to customize values per environment
@@ -165,6 +177,7 @@ chart/dm-nkp-gitops-custom-app/
 #### Scenario: Deploy to 3 environments
 
 **Using `manifests/`:**
+
 ```bash
 # Create 3 separate files or use envsubst
 # dev-deployment.yaml
@@ -186,6 +199,7 @@ kubectl apply -f prod-deployment.yaml
 ```
 
 **Using `chart/templates/`:**
+
 ```bash
 # One chart, multiple value files
 # values-dev.yaml
@@ -219,7 +233,8 @@ helm install app chart/ -f values-prod.yaml
 
 This project provides **both** approaches:
 
-#### `manifests/` - Used for:
+#### `manifests/` - Used for
+
 - **Base resources** (`manifests/base/`) - Simple, direct deployment
 - **Traefik integration** (`manifests/traefik/`) - Environment-specific ingress
 - **Gateway API** (`manifests/gateway-api/`) - With envsubst template support
@@ -227,7 +242,8 @@ This project provides **both** approaches:
 
 **Note**: Monitoring stack (Prometheus, Grafana) is now deployed via Helm charts. See `scripts/setup-monitoring-helm.sh` or `make setup-monitoring-helm`.
 
-#### `chart/templates/` - Used for:
+#### `chart/templates/` - Used for
+
 - **Production deployments** - Full-featured Helm chart
 - **Multiple environments** - Customize via values.yaml
 - **OCI registry distribution** - Package and push to `ghcr.io`
@@ -237,6 +253,7 @@ This project provides **both** approaches:
 ### 9. **Rendering Comparison**
 
 #### `manifests/` - Direct Application
+
 ```bash
 # What you see is what you get
 cat manifests/base/deployment.yaml
@@ -244,6 +261,7 @@ kubectl apply -f manifests/base/deployment.yaml
 ```
 
 #### `chart/templates/` - Template Rendering
+
 ```bash
 # See rendered output
 helm template my-release chart/dm-nkp-gitops-custom-app
@@ -259,14 +277,16 @@ helm install my-release chart/dm-nkp-gitops-custom-app
 
 ### 10. **Best Practices**
 
-#### For `manifests/`:
+#### For `manifests/`
+
 - Keep them simple and readable
 - Use consistent naming
 - Document any required environment variables
 - Use kustomize for overlays if needed
 - Version control all changes
 
-#### For `chart/templates/`:
+#### For `chart/templates/`
+
 - Use meaningful default values
 - Document all configurable values
 - Use `_helpers.tpl` for reusable logic
@@ -293,4 +313,3 @@ helm install my-release chart/dm-nkp-gitops-custom-app
 - **Keep both** for flexibility - use manifests for quick tests, charts for production
 
 Both approaches are valid and serve different needs. This project provides both to give you maximum flexibility!
-

@@ -24,4 +24,3 @@ spec:
       backendRefs:
         - name: ${APP_NAME}
           port: ${METRICS_PORT}
-

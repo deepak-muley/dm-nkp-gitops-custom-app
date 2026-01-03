@@ -48,10 +48,12 @@ make lint
 ### Continuous Integration (CI)
 
 Triggered on:
+
 - Push to `main` or `develop` branches
 - Pull requests to `main` or `develop`
 
 Steps:
+
 1. Checkout code
 2. Setup Go environment
 3. Download dependencies
@@ -67,10 +69,12 @@ See: `.github/workflows/ci.yml`
 ### Continuous Deployment (CD)
 
 Triggered on:
+
 - Tags matching `v*` pattern
 - Push to `main` branch
 
 Steps:
+
 1. Extract version from tag or use default
 2. Build Docker image using buildpacks
 3. Push image to `ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:VERSION`
@@ -194,6 +198,7 @@ export HOSTNAME=dm-nkp-gitops-custom-app.local
 ### Deployment Steps
 
 1. **Deploy Application**:
+
    ```bash
    helm install dm-nkp-gitops-custom-app \
      oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app \
@@ -201,11 +206,13 @@ export HOSTNAME=dm-nkp-gitops-custom-app.local
    ```
 
 2. **Verify ServiceMonitor** (for Prometheus):
+
    ```bash
    kubectl get servicemonitor
    ```
 
 3. **Configure Ingress** (Traefik or Gateway API):
+
    ```bash
    kubectl apply -f manifests/traefik/
    # or
@@ -228,6 +235,7 @@ export HOSTNAME=dm-nkp-gitops-custom-app.local
    - Update `appVersion` in `chart/dm-nkp-gitops-custom-app/Chart.yaml`
 
 2. **Create Tag**:
+
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
@@ -238,6 +246,7 @@ export HOSTNAME=dm-nkp-gitops-custom-app.local
    - CD workflow automatically packages and pushes Helm chart
 
 4. **Verify Release**:
+
    ```bash
    # Check image
    docker pull ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0
@@ -271,4 +280,3 @@ export HOSTNAME=dm-nkp-gitops-custom-app.local
 - Check GitHub Actions logs
 - Verify secrets are set (GITHUB_TOKEN)
 - Check OCI registry permissions
-

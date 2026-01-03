@@ -34,16 +34,19 @@ If you have branch protection enabled, you need to allow auto-merge:
 **Note:** If branch protection requires approvals, you have two options:
 
 **Option A: Disable approval requirement for Dependabot**
+
 - Use CODEOWNERS to exempt Dependabot from review requirements
 - Or configure branch protection to allow auto-merge without approvals
 
 **Option B: Auto-approve Dependabot PRs**
+
 - Add a workflow that auto-approves Dependabot PRs
 - Then auto-merge can proceed
 
 ### 3. Verify Workflow Permissions
 
 The auto-merge workflow requires:
+
 - `contents: write` - To merge PRs
 - `pull-requests: write` - To enable auto-merge
 
@@ -86,6 +89,7 @@ github.event.pull_request.mergeable == true
 ### Verify It's Working
 
 Check the workflow run logs:
+
 - Go to **Actions** → **Auto-merge Dependencies**
 - Look for successful runs
 - Check the logs for: "gh pr merge ... --auto --squash"
@@ -97,6 +101,7 @@ Check the workflow run logs:
 **Issue:** PRs not auto-merging even when checks pass
 
 **Solutions:**
+
 1. **Check branch protection:**
    - Ensure "Allow auto-merge" is enabled in branch protection
    - Verify approval requirements aren't blocking
@@ -122,6 +127,7 @@ Check the workflow run logs:
 **Issue:** Auto-merge is enabled but PR isn't merging
 
 **Solutions:**
+
 1. **Check required checks:**
    - Some checks might still be pending
    - Go to PR → Checks tab to see status
@@ -201,4 +207,3 @@ if: |
 - [Dependabot Configuration](../.github/dependabot.yml)
 - [Auto-merge Workflow](../.github/workflows/auto-merge.yml)
 - [GitHub Actions Reference](./github-actions-reference.md#auto-merge)
-
