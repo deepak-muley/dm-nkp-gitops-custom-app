@@ -3,7 +3,7 @@
 # Variables
 APP_NAME := dm-nkp-gitops-custom-app
 VERSION := 0.1.0
-GO_VERSION := 1.23
+GO_VERSION := 1.25
 BUILD_DIR := bin
 COVERAGE_DIR := coverage
 # Set PUBLIC=true to make the Helm chart public after pushing (default: false)
