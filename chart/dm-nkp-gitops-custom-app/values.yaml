@@ -1,0 +1,121 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+  # AppArmor Profile is automatically added in the deployment template
+
+podSecurityContext:
+  # Seccomp Profile (pod-level)
+  seccompProfile:
+    type: RuntimeDefault
+  # AppArmor Profile (pod-level) - Commented out for kind clusters (AppArmor not enabled)
+  # appArmorProfile:
+  #   type: RuntimeDefault
+  # High UID Group (>10000) - nobody group
+  runAsGroup: 65534
+  fsGroup: 65534
+  # Run as Non-Root
+  runAsNonRoot: true
+  runAsUser: 65532
+  # Use User Namespaces (Kubernetes 1.25+)
+  # hostUsers: false  # Disabled: requires containerd with idmap mounts support (not available in kind clusters)
+
+securityContext:
+  # Seccomp Profile (container-level)
+  seccompProfile:
+    type: RuntimeDefault
+  # AppArmor Profile (container-level) - Commented out for kind clusters (AppArmor not enabled)
+  # appArmorProfile:
+  #   type: RuntimeDefault
+  # High UID Group (container-level)
+  runAsGroup: 65534
+  # Run as Non-Root (container-level)
+  runAsNonRoot: true
+  runAsUser: 65532
+  # Drop ALL Capabilities
+  capabilities:
+    drop:
+      - ALL
+  # Read-Only Root Filesystem
+  readOnlyRootFilesystem: true
+  # Additional security
+  allowPrivilegeEscalation: false
+  privileged: false
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: dm-nkp-gitops-custom-app.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Security: Volume mounts for writable directories (required for readOnlyRootFilesystem)
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: var-run
+    emptyDir: {}
+  - name: var-log
+    emptyDir: {}
+
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: var-run
+    mountPath: /var/run
+  - name: var-log
+    mountPath: /var/log
+
+# Security: Disable automount ServiceAccount Token (set to false if pod doesn't need Kubernetes API access)
+automountServiceAccountToken: true
+
+prometheus:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    port: metrics
+

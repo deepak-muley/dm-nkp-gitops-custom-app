@@ -1,0 +1,24 @@
+# Example values file for deploying with monitoring dependencies
+# This shows how to configure the app when using Helm-based monitoring
+
+# Application configuration
+replicaCount: 2
+
+image:
+  repository: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+# Prometheus ServiceMonitor configuration
+# This works with kube-prometheus-stack Helm chart
+prometheus:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    port: metrics
+    # Additional labels if using prometheus.prometheusSpec.serviceMonitorSelector
+    # labels:
+    #   release: prometheus
+

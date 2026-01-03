@@ -1,0 +1,62 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+env:
+  APP_NAME: dm-nkp-gitops-custom-app
+  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=0.1.0
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE=${{ env.REGISTRY }}/${{ env.APP_NAME }}:$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install pack CLI
+        uses: buildpacks/github-actions/setup-pack@v4.3.2
+
+      - name: Build and push Docker image
+        run: |
+          pack build ${{ steps.version.outputs.IMAGE }} \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_BUILDABLE=./cmd/app \
+            --env PORT=8080 \
+            --env METRICS_PORT=9090 \
+            --publish
+
+      - name: Push Helm chart
+        run: |
+          helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.VERSION }} --app-version ${{ steps.version.outputs.VERSION }} -d chart/
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}
+

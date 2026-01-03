@@ -1,0 +1,14 @@
+apiVersion: v2
+name: dm-nkp-gitops-custom-app
+description: A Helm chart for dm-nkp-gitops-custom-app
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - prometheus
+  - metrics
+  - monitoring
+maintainers:
+  - name: Deepak Muley
+home: https://github.com/deepak-muley/dm-nkp-gitops-custom-app
+

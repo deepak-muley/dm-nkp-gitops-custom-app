@@ -1,0 +1,20 @@
+[project]
+id = "dm-nkp-gitops-custom-app"
+
+[build]
+  [[build.env]]
+    name = "GOOGLE_RUNTIME_VERSION"
+    value = "1.25"
+
+  [[build.env]]
+    name = "GOOGLE_BUILDABLE"
+    value = "./cmd/app"
+
+  [[build.env]]
+    name = "PORT"
+    value = "8080"
+
+  [[build.env]]
+    name = "METRICS_PORT"
+    value = "9090"
+

@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dm-nkp-gitops-custom-app
+  labels:
+    app: dm-nkp-gitops-custom-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dm-nkp-gitops-custom-app
+  template:
+    metadata:
+      labels:
+        app: dm-nkp-gitops-custom-app
+      annotations:
+        # AppArmor Profile for security - Commented out for kind clusters (AppArmor not enabled)
+        # container.apparmor.security.beta.kubernetes.io/app: runtime/default
+    spec:
+      # Use User Namespaces (Kubernetes 1.25+)
+      # hostUsers: false  # Disabled: requires containerd with idmap mounts support (not available in kind clusters)
+      securityContext:
+        # Seccomp Profile (pod-level)
+        seccompProfile:
+          type: RuntimeDefault
+        # AppArmor Profile (pod-level) - Commented out for kind clusters (AppArmor not enabled)
+        # appArmorProfile:
+        #   type: RuntimeDefault
+        # High UID Group (>10000) - nobody group
+        runAsGroup: 65534
+        fsGroup: 65534
+        # Run as Non-Root
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: app
+          image: dm-nkp-gitops-custom-app:test
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          securityContext:
+            # Seccomp Profile (container-level)
+            seccompProfile:
+              type: RuntimeDefault
+            # AppArmor Profile (container-level) - Commented out for kind clusters (AppArmor not enabled)
+            # appArmorProfile:
+            #   type: RuntimeDefault
+            # High UID Group (container-level)
+            runAsGroup: 65534
+            # Run as Non-Root (container-level)
+            runAsNonRoot: true
+            runAsUser: 65532
+            # Drop ALL Capabilities
+            capabilities:
+              drop:
+                - ALL
+            # Read-Only Root Filesystem
+            readOnlyRootFilesystem: true
+            # Additional security
+            allowPrivilegeEscalation: false
+            privileged: false
+          env:
+            - name: PORT
+              value: "8080"
+            - name: METRICS_PORT
+              value: "9090"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          # Volume mounts for writable directories (needed for readOnlyRootFilesystem)
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-run
+              mountPath: /var/run
+            - name: var-log
+              mountPath: /var/log
+      # Volumes for writable directories (required for readOnlyRootFilesystem)
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: var-run
+          emptyDir: {}
+        - name: var-log
+          emptyDir: {}
+
