@@ -179,7 +179,7 @@ jobs:
           go-version: '1.25'
 
       - name: Run license checker
-        if: ${{ secrets.FOSSA_API_KEY != '' }}
+        if: ${{ secrets.FOSSA_API_KEY != '' && secrets.FOSSA_API_KEY != null }}
         uses: fossas/fossa-action@v2
         continue-on-error: true
         with:
