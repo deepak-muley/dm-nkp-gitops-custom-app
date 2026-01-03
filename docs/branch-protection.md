@@ -120,12 +120,12 @@ make check-branch-protection-repo REPO=microsoft/vscode BRANCH=main
 3. Click **Add rule** or edit the existing rule for `master`
 4. Configure the following:
    - ✅ **Require a pull request before merging**
-     - Require approvals: 1
+     - Require approvals: 0 (for solo developers) or 1+ (for teams)
      - Dismiss stale pull request approvals when new commits are pushed
    - ✅ **Require status checks to pass before merging**
      - Require branches to be up to date before merging
    - ✅ **Require conversation resolution before merging**
-   - ✅ **Do not allow bypassing the above settings**
+   - ⚠️ **Do not allow bypassing the above settings** (disabled by default for solo developers)
    - ❌ **Restrict who can push to matching branches** (optional)
    - ❌ **Allow force pushes** (should be disabled)
    - ❌ **Allow deletions** (should be disabled)
@@ -135,17 +135,23 @@ make check-branch-protection-repo REPO=microsoft/vscode BRANCH=main
 ### Manual Setup via GitHub CLI
 
 ```bash
-# Set up branch protection
+# Set up branch protection (default: 0 approvals, enforce_admins=false for solo developers)
 gh api repos/deepak-muley/dm-nkp-gitops-custom-app/branches/master/protection \
   --method PUT \
   --field required_status_checks='{"strict":true,"contexts":[]}' \
-  --field enforce_admins=true \
-  --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true}' \
+  --field enforce_admins=false \
+  --field required_pull_request_reviews='{"required_approving_review_count":0,"dismiss_stale_reviews":true}' \
   --field restrictions=null \
   --field allow_force_pushes=false \
   --field allow_deletions=false \
   --field required_conversation_resolution=true
 ```
+
+**Note:** The default configuration sets:
+- `required_approving_review_count=0` - No approvals needed (solo developers can merge their own PRs)
+- `enforce_admins=false` - Admins can bypass protection and update their own PR branches
+
+For teams, increase `required_approving_review_count` to 1 or more and optionally set `enforce_admins=true`.
 
 ## Verify Branch Protection
 
@@ -181,11 +187,13 @@ This confirms branch protection is working.
 
 ### Minimum Protection (Recommended)
 
-- ✅ Require pull request reviews (1 approval)
+- ✅ Require pull request reviews (0 approvals for solo developers, 1+ for teams)
 - ✅ Require status checks to pass
 - ✅ Require branches to be up to date
 - ✅ Block force pushes
 - ✅ Block deletions
+
+**Note:** The default configuration uses 0 approvals, which is suitable for solo developers. For teams, increase this to 1 or more.
 
 ### Enhanced Protection (Optional)
 
@@ -218,8 +226,31 @@ This confirms branch protection is working.
 4. **Create a Pull Request:**
    - Go to GitHub and create a PR from your branch to `master`
    - Wait for CI checks to pass
-   - Get at least 1 approval
-   - Merge the PR
+   - Merge the PR (no approval needed for solo developers)
+
+### Updating Your Own PRs (Admin)
+
+With the default configuration (`enforce_admins=false`), admins can:
+- **Update their own PR branches** by pushing to the feature branch
+- **Bypass protection rules** when needed (for emergency fixes)
+- Still use pull requests (recommended workflow)
+
+**Example workflow:**
+```bash
+# Create a PR branch
+git checkout -b feature/my-feature
+git commit -m "feat: add feature"
+git push origin feature/my-feature
+
+# Create PR on GitHub, then later update it:
+git commit --amend -m "feat: add feature (updated)"
+git push origin feature/my-feature --force-with-lease  # Works for your own PR branches
+```
+
+**Note:** 
+- Direct pushes to the protected branch (e.g., `master`) are still blocked for everyone, including admins
+- With 0 required approvals, you can merge your own PRs without needing someone else to approve
+- Status checks must still pass before merging
 
 ### Emergency Bypass (Admin Only)
 
@@ -286,17 +317,19 @@ This requires the `test`, `lint`, and `build` jobs to pass before merging.
 
 ### Understanding "Enforce Admins"
 
-When `enforce_admins` is enabled:
+**Default Configuration (`enforce_admins=false`):**
+- **Admins can bypass protection rules** (suitable for solo developers)
+- Admins can update their own PR branches freely
+- Admins can push to feature branches (but not directly to protected branch)
+- Direct pushes to protected branch (e.g., `master`) are still blocked for everyone
+- Useful for solo developers who need to update their own PRs
+
+**Strict Configuration (`enforce_admins=true`):**
 - **Admins must follow all protection rules** (no bypass)
 - Admins cannot push directly to protected branches
 - Admins must use pull requests like everyone else
 - Admins can still modify protection rules (if they have repo admin access)
-
-When `enforce_admins` is disabled:
-- **Admins can bypass protection rules**
-- Admins can push directly to protected branches
-- Admins can force push (if not separately blocked)
-- Useful for emergency fixes, but reduces protection
+- Recommended for teams with multiple developers
 
 ### Viewing Admins and Teams
 

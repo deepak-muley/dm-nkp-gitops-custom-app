@@ -264,7 +264,11 @@ check-branch-protection-repo: ## Check branch protection for another repo (use R
 		echo "Example: make check-branch-protection-repo REPO=kubernetes/kubernetes BRANCH=main"; \
 		exit 1; \
 	fi
-	@./scripts/branch-protect.sh --show $(REPO) --branch $(BRANCH)
+	@if [ -n "$(BRANCH)" ]; then \
+		./scripts/branch-protect.sh --show $(REPO) --branch $(BRANCH); \
+	else \
+		./scripts/branch-protect.sh --show $(REPO); \
+	fi
 
 check-artifact: ## Check if an artifact is a Docker image or Helm chart (use ARTIFACT=ghcr.io/user/package:tag)
 	@bash -c '\

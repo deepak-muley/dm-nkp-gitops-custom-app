@@ -19,12 +19,12 @@ MODE="show"  # Default to show mode
 
 # Default protection rules that --setup would apply
 SETUP_RULES=(
-    "Required PR reviews: 1 approval"
+    "Required PR reviews: 0 approvals (solo developer)"
     "Dismiss stale reviews: Yes"
     "Require code owner reviews: No"
     "Required status checks: Yes (strict mode)"
     "Require conversation resolution: Yes"
-    "Enforce admins: Yes"
+    "Enforce admins: No (admins can bypass for PR updates)"
     "Allow force pushes: No"
     "Allow deletions: No"
     "Lock branch: No"
@@ -259,15 +259,18 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
         done
         echo ""
         if [ -n "$ADMINS" ]; then
-            echo "⚠️  IMPORTANT: With 'Enforce admins' enabled, these administrators will be affected:"
+            echo "ℹ️  Note: With 'Enforce admins' disabled, these administrators can:"
             echo "$ADMINS" | tr ',' '\n' | sed 's/^/   - /'
             echo ""
-            echo "   Admins will need to:"
-            echo "     - Use pull requests (no direct pushes)"
-            echo "     - Get PR approvals before merging"
-            echo "     - Follow all protection rules"
+            echo "   Admins can:"
+            echo "     - Update their own PR branches (push to PR branches)"
+            echo "     - Bypass protection rules when needed (emergency fixes)"
+            echo "     - Still use pull requests (recommended workflow)"
             echo ""
-            echo "   To allow admins to bypass protection, you can disable 'Enforce admins' after setup."
+            echo "   Protection still applies to:"
+            echo "     - Direct pushes to $BRANCH (blocked for everyone)"
+            echo "     - Merging PRs without approval (blocked)"
+            echo "     - Merging PRs with failing status checks (blocked)"
             echo ""
         fi
         echo "To apply these rules, run:"
@@ -282,20 +285,20 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
     
     # Show admins before setup
     if [ -n "$ADMINS" ]; then
-        echo "⚠️  WARNING: The following administrators will be affected:"
+        echo "ℹ️  Note: The following administrators will have bypass privileges:"
         echo "$ADMINS" | tr ',' '\n' | sed 's/^/   - /'
         echo ""
-        echo "With 'enforce_admins=true', even admins must follow protection rules."
-        echo "Admins will NOT be able to:"
-        echo "  - Push directly to $BRANCH"
-        echo "  - Force push to $BRANCH"
-        echo "  - Delete $BRANCH"
-        echo "  - Bypass PR requirements"
+        echo "With 'enforce_admins=false', admins can:"
+        echo "  - Update their own PR branches (push to feature branches)"
+        echo "  - Bypass protection rules when needed (for emergency fixes)"
+        echo "  - Still use pull requests (recommended workflow)"
         echo ""
-        echo "Admins can still:"
-        echo "  - Create and merge PRs"
-        echo "  - Modify protection rules (if they have repo admin access)"
-        echo "  - Access repository settings"
+        echo "Protection still applies to:"
+        echo "  - Direct pushes to $BRANCH (blocked for everyone, including admins)"
+        echo "  - Merging PRs without approval (blocked)"
+        echo "  - Merging PRs with failing status checks (blocked)"
+        echo ""
+        echo "This configuration is suitable for solo developers or small teams."
         echo ""
         read -p "Continue with setup? (y/N) " -n 1 -r
         echo
@@ -315,6 +318,7 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
     # 4. Require conversation resolution before merging
     # 5. Do not allow force pushes
     # 6. Do not allow deletions
+    # 7. Allow admins to bypass (for solo developers to update their own PRs)
     
     # Create temporary JSON file for the protection settings
     PROTECTION_JSON=$(cat <<EOF
@@ -323,9 +327,9 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
     "strict": true,
     "contexts": []
   },
-  "enforce_admins": true,
+  "enforce_admins": false,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1,
+    "required_approving_review_count": 0,
     "dismiss_stale_reviews": true,
     "require_code_owner_reviews": false,
     "require_last_push_approval": false
@@ -348,6 +352,13 @@ EOF
     
     echo ""
     echo "✓ Branch protection enabled for $BRANCH"
+    echo ""
+    echo "Configuration:"
+    echo "  - Admins can bypass protection (suitable for solo developers)"
+    echo "  - Direct pushes to $BRANCH are still blocked"
+    echo "  - PRs require 0 approvals (solo developer - you can merge your own PRs)"
+    echo "  - PRs still require passing status checks"
+    echo "  - You can update your own PR branches freely"
     echo ""
     echo "Protection rules applied:"
     for rule in "${SETUP_RULES[@]}"; do
