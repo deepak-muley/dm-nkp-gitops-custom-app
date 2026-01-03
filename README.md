@@ -86,6 +86,77 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 
 See [E2E_DEMO.md](E2E_DEMO.md) for detailed step-by-step instructions.
 
+### Grafana Dashboard - End-to-End Verification
+
+Once the application is deployed and running, you can verify the complete end-to-end setup by viewing the Grafana dashboard. The dashboard provides real-time visualization of application metrics, demonstrating that the entire monitoring stack is working correctly.
+
+#### Dashboard Overview
+
+The Grafana dashboard shows comprehensive metrics from the application, including HTTP request patterns, performance metrics, and instance-level breakdowns. Here are two screenshots demonstrating the dashboard in action:
+
+**Dashboard View 1: Request Metrics and Performance**
+
+![Grafana Dashboard - Request Metrics](docs/images/grafana-dashboard-request-metrics.png)
+
+This view shows:
+- **Top Metrics Bar**: Key performance indicators including:
+  - `n95`: 95th percentile response time (4.75 ms) - showing consistent low latency
+  - `p90`: 90th percentile response size (70 B) - indicating stable response payloads
+- **HTTP Requests by Method and Status**: Line graph showing GET 200 requests over time, with a sustained rate of ~0.35 requests/second during active periods
+- **Business Metrics Table**: Displays custom business metrics with instance-level details
+- **Total Request Rate by Instance**: Shows request distribution across multiple application instances (10.244.0.118 and 10.244.0.120), demonstrating load balancing and instance-level visibility
+
+**Dashboard View 2: Comprehensive Metrics Overview**
+
+![Grafana Dashboard - Metrics Overview](docs/images/grafana-dashboard-metrics-overview.png)
+
+This comprehensive view displays:
+- **HTTP Request Rate**: Line graph showing requests per second (0-0.4 req/s range), with active periods showing consistent ~0.3 req/s traffic
+- **Active HTTP Connections**: Gauge visualization showing zero active connections (indicating stateless request handling)
+- **HTTP Request Duration (Percentiles)**: 
+  - p50 (median): 2.50 ms - half of requests complete in this time or faster
+  - p95: 4.75 ms - 95% of requests complete within this duration
+  - Both metrics show stable, flat lines indicating consistent performance
+- **HTTP Response Size**: Bar chart showing stable response sizes around 64-70 bytes, with p50 and p90 percentiles both at 70 B
+
+#### Understanding the Dashboard
+
+**What These Metrics Tell You:**
+
+1. **Request Rate Patterns**: The line graphs show when traffic is active vs. idle, helping you understand usage patterns and identify peak times.
+
+2. **Performance Metrics**: 
+   - Low p50 and p95 values (2.5ms and 4.75ms) indicate excellent response times
+   - Flat, stable lines mean consistent performance without spikes or degradation
+
+3. **Instance Distribution**: Multiple instances (10.244.0.118, 10.244.0.120) show the application is running in a distributed setup, with requests being load-balanced across instances.
+
+4. **Response Characteristics**: 
+   - Consistent response sizes (70 B) indicate predictable payloads
+   - Zero active connections between requests shows efficient connection handling
+
+5. **End-to-End Verification**: The presence of data across all panels confirms:
+   - ✅ Application is running and serving requests
+   - ✅ Prometheus is successfully scraping metrics
+   - ✅ Grafana is querying Prometheus correctly
+   - ✅ ServiceMonitor is configured properly
+   - ✅ Metrics are being exported correctly from the application
+
+**How to Access:**
+
+```bash
+# Port forward to Grafana
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+
+# Open in browser
+open http://localhost:3000
+# Login: admin/admin
+
+# Navigate to: Home > Dashboards > dm-nkp-gitops-custom-app Metrics
+```
+
+For more details on using and customizing the dashboard, see the [Grafana Dashboard Guide](docs/grafana.md).
+
 ### Local Development
 
 1. **Clone the repository**:
