@@ -209,7 +209,7 @@ jobs:
           echo "Building PR image: $IMAGE"
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        uses: buildpacks/github-actions/setup-pack@v5.10.0
 
       - name: Build and push Docker image to dev path
         run: |
