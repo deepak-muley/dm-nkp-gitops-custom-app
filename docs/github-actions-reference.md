@@ -194,6 +194,8 @@ Automatically label PRs and issues based on:
 - `size/L` - 30-99 files
 - `size/XL` - 100+ files
 
+**Note:** Size-based labeling uses a custom GitHub script (not labeler-size.yml) since `actions/labeler@v5` doesn't support size-based labeling natively.
+
 ## Dependabot Configuration
 
 **File:** `.github/dependabot.yml`

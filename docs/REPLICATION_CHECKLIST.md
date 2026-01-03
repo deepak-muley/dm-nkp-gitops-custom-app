@@ -27,7 +27,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] `.github/CODEOWNERS` (update owners)
 - [ ] `.github/dependabot.yml`
 - [ ] `.github/labeler.yml`
-- [ ] `.github/labeler-size.yml`
+- [ ] Size-based labeling (implemented in label.yml workflow)
 
 ### Pre-Commit Hooks (Recommended)
 - [ ] `.pre-commit-config.yaml`
