@@ -58,7 +58,7 @@ jobs:
           echo "IMAGE_VERSION=$TEST_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        uses: buildpacks/github-actions/setup-pack@v5.10.0
 
       - name: Build Docker image for scanning
         run: |
@@ -114,7 +114,7 @@ jobs:
           echo "IMAGE_VERSION=$TEST_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        uses: buildpacks/github-actions/setup-pack@v5.10.0
 
       - name: Build Docker image
         run: |
