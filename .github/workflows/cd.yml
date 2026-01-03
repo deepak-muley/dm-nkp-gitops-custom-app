@@ -57,7 +57,7 @@ jobs:
           echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v4.3.2
+        uses: buildpacks/github-actions/setup-pack@v5.0.0
 
       - name: Build and push Docker image
         run: |
