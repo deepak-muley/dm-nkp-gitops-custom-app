@@ -4,6 +4,7 @@
 [![CD](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CD/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/cd.yml)
 [![Security Scanning](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/Security%20Scanning/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
 [![CodeQL](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CodeQL/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app/badge)](https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
 [![Kubernetes](https://img.shields.io/badge/kubernetes-1.28+-blue.svg)](https://kubernetes.io/)
@@ -38,6 +39,7 @@ This is a demo application that demonstrates:
 - **[Model Repository Template](docs/model-repository-template.md)** - Complete guide to replicating this repository setup
 - **[CI/CD Pipeline](docs/cicd-pipeline.md)** - Complete CI/CD documentation
 - **[GitHub Actions Reference](docs/github-actions-reference.md)** - All workflows documented
+- **[OpenSSF Scorecard](docs/openssf-scorecard.md)** - Security posture assessment
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[Architecture Decision Records](docs/adr/)** - Technical decision documentation
 

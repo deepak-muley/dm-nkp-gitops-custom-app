@@ -21,7 +21,7 @@ This document provides a quick reference of all GitHub Actions workflows configu
 3. **Security Scanning** (`.github/workflows/security.yml`)
    - Runs on: PRs, pushes, daily schedule
    - Purpose: Comprehensive security scanning
-   - Jobs: codeql, container-scan, sbom, dependency-review, license-scan
+   - Jobs: codeql, container-scan, sbom, dependency-review, license-scan, scorecard
 
 ### Automation Workflows
 

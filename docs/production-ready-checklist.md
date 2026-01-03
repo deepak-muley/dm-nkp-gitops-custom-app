@@ -40,6 +40,13 @@ This document verifies that the repository has a production-ready, enterprise-gr
   - Tool: FOSSA (optional)
   - Requires: `FOSSA_API_KEY` secret
 
+- [x] **OpenSSF Scorecard** - Repository security posture assessment
+  - Tool: OpenSSF Scorecard
+  - Checks: 20+ security best practices
+  - Output: SARIF format in GitHub Security tab
+  - Publishing: Results published to OpenSSF API
+  - Frequency: PRs, pushes, daily schedule
+
 ### Secret Management
 - [x] Secret scanning in CI
 - [x] `.gitignore` excludes key files

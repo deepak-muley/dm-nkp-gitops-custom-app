@@ -26,6 +26,7 @@ Comprehensive security scanning including:
 - SBOM generation
 - Dependency review
 - License scanning
+- OpenSSF Scorecard analysis
 
 ### Jobs
 
@@ -61,6 +62,25 @@ Comprehensive security scanning including:
 - **Tool:** FOSSA (optional)
 - **Requires:** `FOSSA_API_KEY` secret (optional)
 - **Purpose:** License compliance checking
+
+#### 6. OpenSSF Scorecard Analysis
+- **Tool:** OpenSSF Scorecard
+- **Frequency:** On every PR, push, and daily schedule
+- **Purpose:** Assess repository security posture and best practices
+- **Checks:**
+  - Security policy presence
+  - Branch protection rules
+  - Code review requirements
+  - Dependency update tools
+  - Automated security updates
+  - Signed releases
+  - Binary artifacts
+  - Dangerous workflow patterns
+  - Token permissions
+  - And more (20+ checks)
+- **Output:** SARIF format uploaded to GitHub Security tab
+- **Publishing:** Results published to OpenSSF API for public repositories
+- **Permissions:** Requires `id-token: write` for publishing results
 
 ### Configuration
 
