@@ -82,7 +82,7 @@ jobs:
           kind version
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
 
       - name: Install Helm
         uses: azure/setup-helm@v3
@@ -104,7 +104,7 @@ jobs:
         run: make deps
 
       - name: Download Helm chart artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: helm-chart
           path: chart/
@@ -209,7 +209,7 @@ jobs:
           echo "Building PR image: $IMAGE"
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        uses: buildpacks/github-actions/setup-pack@v5.10.0
 
       - name: Build and push Docker image to dev path
         run: |

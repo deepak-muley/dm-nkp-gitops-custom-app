@@ -57,7 +57,7 @@ jobs:
           echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        uses: buildpacks/github-actions/setup-pack@v5.10.0
 
       - name: Build and push Docker image
         run: |
@@ -119,7 +119,7 @@ jobs:
           kind version
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
 
       - name: Install Helm
         uses: azure/setup-helm@v3
