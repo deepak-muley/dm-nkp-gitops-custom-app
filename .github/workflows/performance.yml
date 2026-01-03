@@ -1,11 +1,16 @@
 name: Performance Testing
 
+# DISABLED: This workflow is disabled but kept for reference
+# To re-enable, remove the 'if: false' conditions from all jobs below
+# on:
+#   pull_request:
+#     branches: [ main, master ]
+#   push:
+#     branches: [ main, master ]
+#   workflow_dispatch:
+
 on:
-  pull_request:
-    branches: [ main, master ]
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+  workflow_dispatch:  # Keep workflow_dispatch so workflow is visible but won't auto-run
 
 env:
   APP_NAME: dm-nkp-gitops-custom-app
@@ -14,7 +19,7 @@ jobs:
   load-test:
     name: Load Testing
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: false  # DISABLED: Workflow kept for reference only
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -105,7 +110,7 @@ jobs:
   resource-usage:
     name: Resource Usage Monitoring
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: false  # DISABLED: Workflow kept for reference only
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
