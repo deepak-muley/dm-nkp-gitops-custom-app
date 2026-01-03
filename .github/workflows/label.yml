@@ -14,6 +14,7 @@ jobs:
       issues: write
       pull-requests: write
       contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,9 +28,59 @@ jobs:
           sync-labels: true
 
       - name: Add size label to PRs
-        uses: actions/labeler@v5
         if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          configuration-path: .github/labeler-size.yml
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            
+            // Get changed files count
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            const changedFiles = files.length;
+            let sizeLabel = '';
+            
+            // Determine size label based on number of changed files
+            if (changedFiles === 1) {
+              sizeLabel = 'size/XS';
+            } else if (changedFiles >= 2 && changedFiles < 10) {
+              sizeLabel = 'size/S';
+            } else if (changedFiles >= 10 && changedFiles < 30) {
+              sizeLabel = 'size/M';
+            } else if (changedFiles >= 30 && changedFiles < 100) {
+              sizeLabel = 'size/L';
+            } else if (changedFiles >= 100) {
+              sizeLabel = 'size/XL';
+            }
+            
+            if (sizeLabel) {
+              // Remove existing size labels
+              const existingLabels = pr.labels
+                .map(label => label.name)
+                .filter(name => name.startsWith('size/'));
+              
+              for (const label of existingLabels) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: label,
+                });
+              }
+              
+              // Add new size label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [sizeLabel],
+              });
+              
+              console.log(`Added size label: ${sizeLabel} (${changedFiles} files changed)`);
+            }
 

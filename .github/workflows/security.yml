@@ -179,12 +179,11 @@ jobs:
           go-version: '1.25'
 
       - name: Run license checker
+        if: ${{ secrets.FOSSA_API_KEY != '' }}
         uses: fossas/fossa-action@v2
         continue-on-error: true
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
-          # Optional: Only scan if FOSSA_API_KEY is set
-          if: ${{ secrets.FOSSA_API_KEY != '' }}
 
       - name: Check Go module licenses
         run: |
