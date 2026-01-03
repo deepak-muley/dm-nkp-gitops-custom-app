@@ -34,6 +34,9 @@ jobs:
       - name: Download dependencies
         run: make deps
 
+      - name: Check for secrets
+        run: make check-secrets
+
       - name: Run linters
         run: make lint
 

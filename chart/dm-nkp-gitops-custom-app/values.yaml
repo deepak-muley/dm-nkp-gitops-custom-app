@@ -3,6 +3,8 @@ replicaCount: 2
 image:
   repository: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
   pullPolicy: IfNotPresent
+  # Use immutable versioning (e.g., "0.1.0+sha-abc1234") for production deployments
+  # See docs/immutable-versioning.md for details
   tag: "0.1.0"
 
 imagePullSecrets: []
