@@ -103,7 +103,6 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 │   ├── CODEOWNERS
 │   ├── dependabot.yml
 │   ├── labeler.yml
-│   ├── labeler-size.yml
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.md
 │   │   ├── feature_request.md
