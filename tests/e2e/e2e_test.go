@@ -16,12 +16,12 @@ import (
 
 var _ = Describe("E2E Tests", func() {
 	var (
-		appPath      string
-		session      *gexec.Session
-		baseURL      = "http://localhost:8080"
-		metricsURL   = "http://localhost:9090"
-		kindCluster  = "dm-nkp-test-cluster"
-		namespace    = "dm-nkp-test"
+		appPath     string
+		session     *gexec.Session
+		baseURL     = "http://localhost:8080"
+		metricsURL  = "http://localhost:9090"
+		kindCluster = "dm-nkp-test-cluster"
+		namespace   = "dm-nkp-test"
 	)
 
 	BeforeSuite(func() {
@@ -211,18 +211,18 @@ func httpGet(url string) (string, error) {
 			return string(output), nil
 		}
 	}
-	
+
 	// Fallback to Go http client
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
-	
+
 	body := make([]byte, 0)
 	buf := make([]byte, 1024)
 	for {
@@ -407,10 +407,9 @@ func cleanupMonitoringStack() {
 	cmd := exec.Command("helm", "uninstall", "prometheus", "--namespace", "monitoring", "--ignore-not-found=true")
 	session, _ := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 	session.Wait()
-	
+
 	// Also delete the namespace if it exists
 	cmd = exec.Command("kubectl", "delete", "namespace", "monitoring", "--ignore-not-found=true")
 	session, _ = gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 	session.Wait()
 }
-

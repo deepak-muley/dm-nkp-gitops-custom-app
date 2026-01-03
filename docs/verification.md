@@ -422,4 +422,3 @@ Once verification is complete:
 2. **Push to GitHub**: `git push origin main`
 3. **Verify GitHub Actions**: Check Actions tab in GitHub
 4. **Deploy to Kubernetes**: Use Helm chart or manifests
-

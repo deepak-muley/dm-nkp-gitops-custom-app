@@ -87,4 +87,3 @@ else
     echo "4. Store secrets in secure secret management (GitHub Secrets, Vault, etc.)"
     exit $EXIT_CODE
 fi
-

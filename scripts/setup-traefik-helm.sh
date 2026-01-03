@@ -66,4 +66,3 @@ echo "  http://localhost:8080/dashboard/"
 echo ""
 echo "✅ Traefik is now ready to handle IngressRoute resources"
 echo ""
-

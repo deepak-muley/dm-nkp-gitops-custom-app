@@ -17,4 +17,3 @@ spec:
       name: metrics
   selector:
     {{- include "dm-nkp-gitops-custom-app.selectorLabels" . | nindent 4 }}
-

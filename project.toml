@@ -17,4 +17,3 @@ id = "dm-nkp-gitops-custom-app"
   [[build.env]]
     name = "METRICS_PORT"
     value = "9090"
-

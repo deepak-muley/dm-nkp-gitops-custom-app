@@ -11,6 +11,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 ## Files to Create
 
 ### Root Level (Required)
+
 - [ ] `LICENSE` - Apache 2.0 license
 - [ ] `SECURITY.md` - Security policy (update email)
 - [ ] `CODE_OF_CONDUCT.md` - Contributor Covenant
@@ -19,6 +20,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] `README.md` - Project overview (add badges)
 
 ### GitHub Configuration (Required)
+
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.md`
 - [ ] `.github/ISSUE_TEMPLATE/feature_request.md`
 - [ ] `.github/ISSUE_TEMPLATE/question.md`
@@ -30,16 +32,19 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] Size-based labeling (implemented in label.yml workflow)
 
 ### Pre-Commit Hooks (Recommended)
+
 - [ ] `.pre-commit-config.yaml`
 - [ ] Install: `pip install pre-commit && pre-commit install`
 
 ### Documentation (Recommended)
+
 - [ ] `docs/adr/0001-record-architecture-decisions.md`
 - [ ] `docs/adr/0002-*.md` (technology decisions)
 - [ ] `docs/TROUBLESHOOTING.md`
 - [ ] `docs/model-repository-template.md` (this guide)
 
 ### CI/CD Workflows (Required)
+
 - [ ] `.github/workflows/ci.yml`
 - [ ] `.github/workflows/cd.yml`
 - [ ] `.github/workflows/security.yml`
@@ -50,6 +55,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] `.github/workflows/performance.yml` (optional)
 
 ### Code Quality (Language-Specific)
+
 - [ ] `.golangci.yml` (for Go projects)
 - [ ] `codecov.yml`
 - [ ] Update `Makefile` with standard targets
@@ -57,6 +63,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 ## Customization Checklist
 
 ### Update Placeholders
+
 - [ ] Replace `security@yourdomain.com` in SECURITY.md
 - [ ] Update copyright in LICENSE
 - [ ] Update CODEOWNERS with actual GitHub usernames
@@ -65,11 +72,13 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] Update app name in all files
 
 ### Configure Secrets
+
 - [ ] Set `CODECOV_TOKEN` in repository secrets
 - [ ] Set `FOSSA_API_KEY` (optional) in repository secrets
 - [ ] Verify `GITHUB_TOKEN` permissions
 
 ### Enable Features
+
 - [ ] Enable Dependency graph in Settings → Security
 - [ ] Enable Dependabot alerts
 - [ ] Enable Code scanning (CodeQL)
@@ -77,6 +86,7 @@ Quick reference checklist for setting up a new model repository. See [Model Repo
 - [ ] Configure branch protection rules
 
 ### Test Everything
+
 - [ ] Test pre-commit hooks: `pre-commit run --all-files`
 - [ ] Create test PR to verify templates
 - [ ] Verify CI workflows run
@@ -164,6 +174,7 @@ cp docs/model-repository-template.md /path/to/new-repo/docs/
 ## Support
 
 For questions or issues:
+
 - Review [Model Repository Template Guide](model-repository-template.md)
 - Check [Troubleshooting Guide](TROUBLESHOOTING.md)
 - Open an issue in this repository
@@ -172,4 +183,3 @@ For questions or issues:
 
 **Last Updated**: 2024  
 **Source Repository**: dm-nkp-gitops-custom-app
-

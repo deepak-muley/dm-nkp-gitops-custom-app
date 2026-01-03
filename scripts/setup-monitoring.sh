@@ -14,4 +14,3 @@ echo ""
 
 # Redirect to Helm-based setup
 exec ./scripts/setup-monitoring-helm.sh "$@"
-

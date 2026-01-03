@@ -118,6 +118,7 @@ echo "Fetching repository access information..."
 ADMINS=""
 ALL_COLLABORATORS=""
 TEAMS=""
+# shellcheck disable=SC2034  # ADMIN_FETCH_ERROR may be used in future
 ADMIN_FETCH_ERROR=""
 COLLABORATOR_FETCH_ERROR=""
 TEAM_FETCH_ERROR=""
@@ -126,7 +127,7 @@ TEAM_FETCH_ERROR=""
 COLLABORATOR_RESPONSE=$(gh api repos/$REPO/collaborators 2>&1)
 if echo "$COLLABORATOR_RESPONSE" | grep -q "\["; then
     # Valid JSON response - extract all collaborators with their permissions
-    if echo "$COLLABORATOR_RESPONSE" | jq -r '.[] | "\(.login)|\(.role_name)"' 2>/dev/null > /tmp/collaborators_$$.txt 2>/dev/null; then
+    if echo "$COLLABORATOR_RESPONSE" | jq -r '.[] | "\(.login)|\(.role_name)"' > /tmp/collaborators_$$.txt 2>/dev/null; then
         if [ -s /tmp/collaborators_$$.txt ]; then
             ALL_COLLABORATORS=$(cat /tmp/collaborators_$$.txt)
             # Extract just admins
@@ -136,14 +137,14 @@ if echo "$COLLABORATOR_RESPONSE" | grep -q "\["; then
     fi
 elif echo "$COLLABORATOR_RESPONSE" | grep -q "403\|404\|Not Found"; then
     COLLABORATOR_FETCH_ERROR="(Access denied - need read access to repository)"
-    ADMIN_FETCH_ERROR="(Access denied - need read access to repository)"
+    # ADMIN_FETCH_ERROR="(Access denied - need read access to repository)"  # Unused variable
 fi
 
 # Get teams and their permissions
 TEAM_RESPONSE=$(gh api repos/$REPO/teams 2>&1)
 if echo "$TEAM_RESPONSE" | grep -q "\["; then
     # Valid JSON response
-    if echo "$TEAM_RESPONSE" | jq -r '.[] | "\(.name)|\(.permission)"' 2>/dev/null > /tmp/teams_$$.txt 2>/dev/null; then
+    if echo "$TEAM_RESPONSE" | jq -r '.[] | "\(.name)|\(.permission)"' > /tmp/teams_$$.txt 2>/dev/null; then
         if [ -s /tmp/teams_$$.txt ]; then
             TEAMS=$(cat /tmp/teams_$$.txt)
         fi
@@ -160,13 +161,13 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
     else
         echo "❌ Branch protection is NOT enabled for $BRANCH"
     fi
-    
+
     echo ""
     echo "Summary:"
     echo "  Repository: $REPO"
     echo "  Branch: $BRANCH"
     echo "  Protection: Not enabled"
-    
+
     if [ "$MODE" = "show" ]; then
         if [ -n "$ALL_COLLABORATORS" ] || [ -n "$TEAMS" ]; then
             echo ""
@@ -174,7 +175,7 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
             echo "Repository Access:"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            
+
             if [ -n "$ALL_COLLABORATORS" ]; then
                 echo "Collaborators and Roles:"
                 # Group by role
@@ -201,7 +202,7 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
                     esac
                 done
                 echo ""
-                
+
                 if [ -n "$ADMINS" ]; then
                     echo "Repository Administrators (can modify protection rules):"
                     echo "$ADMINS" | tr ',' '\n' | sed 's/^/  - /'
@@ -214,7 +215,7 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
                 echo "Collaborators: (None found or unable to fetch)"
                 echo ""
             fi
-            
+
             if [ -n "$TEAMS" ]; then
                 echo "Teams and Permissions:"
                 echo "$TEAMS" | while IFS='|' read -r team_name permission; do
@@ -280,9 +281,9 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
         echo "  make setup-branch-protection"
         exit 0
     fi
-    
+
     echo ""
-    
+
     # Show admins before setup
     if [ -n "$ADMINS" ]; then
         echo "ℹ️  Note: The following administrators will have bypass privileges:"
@@ -308,9 +309,9 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
         fi
         echo ""
     fi
-    
+
     echo "Setting up branch protection..."
-    
+
     # Enable branch protection with the following rules:
     # 1. Require pull request reviews
     # 2. Require status checks to pass
@@ -319,7 +320,7 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
     # 5. Do not allow force pushes
     # 6. Do not allow deletions
     # 7. Allow admins to bypass (for solo developers to update their own PRs)
-    
+
     # Create temporary JSON file for the protection settings
     PROTECTION_JSON=$(cat <<EOF
 {
@@ -344,12 +345,12 @@ if echo "$PROTECTION_STATUS" | grep -q "NOT_PROTECTED\|404\|403"; then
 }
 EOF
 )
-    
+
     # Use --input to pass the JSON properly
     echo "$PROTECTION_JSON" | gh api repos/$REPO/branches/$BRANCH/protection \
         --method PUT \
         --input -
-    
+
     echo ""
     echo "✓ Branch protection enabled for $BRANCH"
     echo ""
@@ -370,7 +371,7 @@ EOF
             echo "Repository Access:"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            
+
             if [ -n "$ALL_COLLABORATORS" ]; then
                 echo "Collaborators and Roles:"
                 echo "$ALL_COLLABORATORS" | while IFS='|' read -r username role; do
@@ -396,7 +397,7 @@ EOF
                     esac
                 done
                 echo ""
-                
+
                 if [ -n "$ADMINS" ]; then
                     echo "⚠️  IMPORTANT: With 'Enforce admins' enabled, these administrators must:"
                     echo "   - Use pull requests (no direct pushes)"
@@ -410,7 +411,7 @@ EOF
                     echo ""
                 fi
             fi
-            
+
             if [ -n "$TEAMS" ]; then
                 echo "Teams and Permissions:"
                 echo "$TEAMS" | while IFS='|' read -r team_name permission; do
@@ -444,7 +445,7 @@ else
     echo "✓ Branch protection is enabled for $BRANCH"
     echo ""
     echo "Current protection rules:"
-    
+
     # Parse and display protection details
     if command -v jq > /dev/null; then
         # Extract current settings
@@ -459,18 +460,18 @@ else
         CURRENT_DELETIONS=$(echo "$PROTECTION_STATUS" | jq -r 'if .allow_deletions then "Yes" else "No" end' 2>/dev/null || echo "No")
         CURRENT_LOCK=$(echo "$PROTECTION_STATUS" | jq -r 'if .lock_branch.enabled then "Yes" else "No" end' 2>/dev/null || echo "No")
         CURRENT_BLOCK_CREATE=$(echo "$PROTECTION_STATUS" | jq -r 'if .block_creations.enabled then "Yes" else "No" end' 2>/dev/null || echo "No")
-        
+
         echo "  Repository: $REPO"
         echo "  Branch: $BRANCH"
         echo ""
-        
+
         # Display all collaborators and teams
         if [ -n "$ALL_COLLABORATORS" ] || [ -n "$TEAMS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "Repository Access:"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            
+
             if [ -n "$ALL_COLLABORATORS" ]; then
                 echo "Collaborators and Roles:"
                 echo "$ALL_COLLABORATORS" | while IFS='|' read -r username role; do
@@ -496,13 +497,13 @@ else
                     esac
                 done
                 echo ""
-                
+
                 if [ -n "$ADMINS" ]; then
                     echo "Repository Administrators (can modify protection rules):"
                     echo "$ADMINS" | tr ',' '\n' | sed 's/^/  - /'
                     echo ""
                 fi
-                
+
                 # Warning about enforce_admins
                 if [ "$CURRENT_ENFORCE_ADMINS" = "Yes" ]; then
                     echo "⚠️  WARNING: 'Enforce admins' is enabled!"
@@ -525,7 +526,7 @@ else
                 echo "Collaborators: (None found or unable to fetch)"
                 echo ""
             fi
-            
+
             if [ -n "$TEAMS" ]; then
                 echo "Teams and Permissions:"
                 echo "$TEAMS" | while IFS='|' read -r team_name permission; do
@@ -559,7 +560,7 @@ else
                 echo ""
             fi
         fi
-        
+
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Protection Settings:"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -573,7 +574,7 @@ else
         echo "  Allow deletions: $CURRENT_DELETIONS"
         echo "  Lock branch: $CURRENT_LOCK"
         echo "  Block creations: $CURRENT_BLOCK_CREATE"
-        
+
         # Compare with setup rules and show what's missing
         if [ "$MODE" = "show" ]; then
             echo ""
@@ -581,9 +582,9 @@ else
             echo "Comparison with --setup defaults:"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            
+
             MISSING_COUNT=0
-            
+
             # Check each rule
             if [ "$CURRENT_PR_REVIEWS" = "0" ]; then
                 echo "  ❌ Missing: Required PR reviews (setup would set: 1 approval)"
@@ -593,14 +594,14 @@ else
             else
                 echo "  ✓ Required PR reviews: OK (1 approval)"
             fi
-            
+
             if [ "$CURRENT_DISMISS_STALE" != "Yes" ]; then
                 echo "  ❌ Missing: Dismiss stale reviews (setup would enable)"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
             else
                 echo "  ✓ Dismiss stale reviews: OK"
             fi
-            
+
             if [ "$CURRENT_STATUS_CHECKS" != "Yes" ]; then
                 echo "  ❌ Missing: Required status checks (setup would enable)"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
@@ -609,14 +610,14 @@ else
             else
                 echo "  ✓ Required status checks: OK (strict mode)"
             fi
-            
+
             if [ "$CURRENT_CONV_RESOLUTION" != "Yes" ]; then
                 echo "  ❌ Missing: Require conversation resolution (setup would enable)"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
             else
                 echo "  ✓ Require conversation resolution: OK"
             fi
-            
+
             if [ "$CURRENT_ENFORCE_ADMINS" != "Yes" ]; then
                 echo "  ⚠️  Different: Enforce admins (setup would enable)"
                 echo "     WARNING: This will require admins to follow protection rules too!"
@@ -624,21 +625,21 @@ else
             else
                 echo "  ✓ Enforce admins: OK (admins must follow protection rules)"
             fi
-            
+
             if [ "$CURRENT_FORCE_PUSH" != "No" ]; then
                 echo "  ⚠️  Warning: Force pushes allowed (setup would disable)"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
             else
                 echo "  ✓ Force pushes blocked: OK"
             fi
-            
+
             if [ "$CURRENT_DELETIONS" != "No" ]; then
                 echo "  ⚠️  Warning: Deletions allowed (setup would disable)"
                 MISSING_COUNT=$((MISSING_COUNT + 1))
             else
                 echo "  ✓ Deletions blocked: OK"
             fi
-            
+
             echo ""
             if [ $MISSING_COUNT -eq 0 ]; then
                 echo "✓ All recommended protection rules are already in place!"
@@ -655,11 +656,11 @@ else
         echo "  (jq not installed - showing raw response)"
         echo "$PROTECTION_STATUS" | head -30
     fi
-    
+
     echo ""
     echo "To view or modify protection rules:"
     echo "  https://github.com/$REPO/settings/branches"
-    
+
     if [ "$MODE" = "show" ]; then
         echo ""
         echo "✓ Check complete (read-only mode)"

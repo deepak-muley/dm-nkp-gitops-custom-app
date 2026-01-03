@@ -7,11 +7,13 @@ This document explains how to differentiate between Docker images and Helm chart
 Both artifacts are stored in the same registry but are different types:
 
 ### Docker Image
+
 ```
 ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:<version>
 ```
 
 ### Helm Chart
+
 ```
 oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:<version>
 ```
@@ -30,6 +32,7 @@ In the GitHub Packages UI (`https://github.com/users/deepak-muley/packages`), th
 ### 2. **By How They're Referenced**
 
 **Docker Image:**
+
 ```bash
 # Pull image
 docker pull ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0+sha-abc1234
@@ -42,6 +45,7 @@ crane ls ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
 ```
 
 **Helm Chart:**
+
 ```bash
 # Pull chart
 helm pull oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
@@ -58,6 +62,7 @@ helm show chart oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitop
 You can check the media type to differentiate:
 
 **Docker Image:**
+
 ```bash
 # Using crane
 crane manifest ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0+sha-abc1234 | jq .mediaType
@@ -65,6 +70,7 @@ crane manifest ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custo
 ```
 
 **Helm Chart:**
+
 ```bash
 # Using crane
 crane manifest ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0+sha-abc1234 | jq .mediaType
@@ -74,12 +80,14 @@ crane manifest ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custo
 ### 4. **By GitHub API**
 
 **List Docker Images:**
+
 ```bash
 curl -H "Authorization: Bearer $GITHUB_TOKEN" \
   https://api.github.com/user/packages?package_type=container
 ```
 
 **Get Package Details:**
+
 ```bash
 # For Docker image
 curl -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -110,11 +118,13 @@ For better clarity, consider using different package names:
 ### Option 1: Separate by Suffix
 
 **Docker Image:**
+
 ```
 ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:<version>
 ```
 
 **Helm Chart:**
+
 ```
 oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app-chart:<version>
 ```
@@ -122,11 +132,13 @@ oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app-cha
 ### Option 2: Separate by Path
 
 **Docker Image:**
+
 ```
 ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/images/dm-nkp-gitops-custom-app:<version>
 ```
 
 **Helm Chart:**
+
 ```
 oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/charts/dm-nkp-gitops-custom-app:<version>
 ```
@@ -134,6 +146,7 @@ oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/charts/dm-nkp-gitops-custom-
 ### Option 3: Keep Current (Works Fine)
 
 The current setup works because:
+
 - They're accessed differently (docker vs helm commands)
 - GitHub UI shows them separately based on metadata
 - OCI registries support multiple artifact types per package name
@@ -186,6 +199,7 @@ check_artifact_type ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-
 The Makefile provides targets to work with each type:
 
 **Docker Image:**
+
 ```bash
 make docker-build      # Build image
 make docker-push       # Push image
@@ -194,6 +208,7 @@ make docker-verify     # Verify signature
 ```
 
 **Helm Chart:**
+
 ```bash
 make helm-chart        # Package chart
 make push-helm-chart   # Push chart
@@ -234,7 +249,8 @@ In the GitHub web interface:
 ### Confusion Between Image and Chart
 
 **Issue**: Hard to tell which is which
-**Solution**: 
+**Solution**:
+
 - Use different package names (recommended)
 - Or check the artifact type using the methods above
 - Use the appropriate tool (docker vs helm) to interact with each
@@ -249,4 +265,3 @@ In the GitHub web interface:
 - [GitHub Container Registry Documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [Helm OCI Support](https://helm.sh/docs/topics/registries/)
 - [OCI Artifacts Specification](https://github.com/opencontainers/artifacts)
-

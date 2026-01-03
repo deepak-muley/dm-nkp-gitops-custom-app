@@ -5,6 +5,7 @@ This guide explains how to deploy the application and its dependencies (Promethe
 ## Overview
 
 Instead of using raw Kubernetes manifests, we use Helm charts for:
+
 - **Prometheus** - via `kube-prometheus-stack` chart
 - **Grafana** - via `grafana` chart (or included in kube-prometheus-stack)
 - **Traefik** - via `traefik` chart
@@ -29,6 +30,7 @@ make setup-monitoring-helm
 ```
 
 This installs:
+
 - Prometheus Operator (kube-prometheus-stack)
 - Grafana
 - ServiceMonitor CRDs
@@ -61,6 +63,7 @@ make setup-gateway-api-helm
 #### Using kube-prometheus-stack (Recommended)
 
 The `kube-prometheus-stack` chart includes:
+
 - Prometheus Operator
 - Prometheus
 - Grafana
@@ -218,6 +221,7 @@ After Grafana is installed:
    - Click Import
 
 3. **Or use Grafana API**:
+
    ```bash
    # Get Grafana admin password
    GRAFANA_PASSWORD=$(kubectl get secret -n monitoring grafana -o jsonpath="{.data.admin-password}" | base64 -d)
@@ -370,4 +374,3 @@ make setup-gateway-api-helm  # Install Gateway API + Traefik via Helm
 - [Grafana Helm Chart](https://github.com/grafana/helm-charts/tree/main/charts/grafana)
 - [Traefik Helm Chart](https://github.com/traefik/traefik-helm-chart)
 - [Gateway API](https://gateway-api.sigs.k8s.io/)
-

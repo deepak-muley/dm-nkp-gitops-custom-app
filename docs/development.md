@@ -11,6 +11,7 @@ This guide covers the development workflow for dm-nkp-gitops-custom-app.
 ## Development Setup
 
 1. **Clone and setup**:
+
    ```bash
    git clone https://github.com/deepak-muley/dm-nkp-gitops-custom-app.git
    cd dm-nkp-gitops-custom-app
@@ -18,6 +19,7 @@ This guide covers the development workflow for dm-nkp-gitops-custom-app.
    ```
 
 2. **Run locally**:
+
    ```bash
    make build
    ./bin/dm-nkp-gitops-custom-app
@@ -54,6 +56,7 @@ This guide covers the development workflow for dm-nkp-gitops-custom-app.
 To add a new Prometheus metric:
 
 1. Define the metric in `internal/metrics/metrics.go`:
+
    ```go
    var MyNewMetric = promauto.NewCounter(prometheus.CounterOpts{
        Name: "my_new_metric_total",
@@ -62,6 +65,7 @@ To add a new Prometheus metric:
    ```
 
 2. Use it in your code:
+
    ```go
    metrics.MyNewMetric.Inc()
    ```
@@ -71,6 +75,7 @@ To add a new Prometheus metric:
 ## Adding New Endpoints
 
 1. Add handler function in `internal/server/server.go`:
+
    ```go
    func handleNewEndpoint(w http.ResponseWriter, r *http.Request) {
        // Your handler logic
@@ -78,6 +83,7 @@ To add a new Prometheus metric:
    ```
 
 2. Register in `New()` function:
+
    ```go
    mux.HandleFunc("/new-endpoint", handleNewEndpoint)
    ```
@@ -94,6 +100,7 @@ To add a new Prometheus metric:
 ### Local Debugging
 
 Run the application with verbose logging:
+
 ```bash
 ./bin/dm-nkp-gitops-custom-app
 ```
@@ -107,6 +114,7 @@ Run the application with verbose logging:
 ### Integration Testing
 
 Run integration tests that start a real server:
+
 ```bash
 make integration-tests
 ```
@@ -121,6 +129,7 @@ make integration-tests
 ## Dependencies
 
 Update dependencies:
+
 ```bash
 go get -u ./...
 go mod tidy
@@ -138,4 +147,3 @@ GOOS=darwin GOARCH=amd64 make build
 # Windows
 GOOS=windows GOARCH=amd64 make build
 ```
-

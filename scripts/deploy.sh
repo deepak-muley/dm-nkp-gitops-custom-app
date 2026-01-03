@@ -25,4 +25,3 @@ fi
 
 echo "Deployment complete!"
 echo "Application available at: http://${HOSTNAME}"
-

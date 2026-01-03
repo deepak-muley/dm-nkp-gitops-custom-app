@@ -46,4 +46,3 @@ New ADRs should follow this template:
 
 [Describe the consequences of this decision]
 ```
-

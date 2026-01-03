@@ -15,4 +15,3 @@ fi
 source "$VENV_DIR/bin/activate"
 echo "✓ Pre-commit virtual environment activated"
 echo "  Run 'deactivate' to exit"
-

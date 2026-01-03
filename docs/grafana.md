@@ -37,6 +37,7 @@ For existing clusters, use the automated setup script:
 ```
 
 This script will:
+
 - ✅ Auto-detect Grafana service and namespace
 - ✅ Configure Prometheus datasource automatically
 - ✅ Import the dashboard
@@ -44,7 +45,7 @@ This script will:
 
 ### Option 2: Import from File
 
-1. Open Grafana UI (usually http://localhost:3000)
+1. Open Grafana UI (usually <http://localhost:3000>)
 2. Click on **"+"** → **"Import"**
 3. Click **"Upload JSON file"**
 4. Select `grafana/dashboard.json`
@@ -77,6 +78,7 @@ When deploying with the monitoring stack, the dashboard is automatically provisi
 ## Using with E2E Tests
 
 The e2e tests automatically set up:
+
 - Application deployment
 - Prometheus for metrics scraping
 - Grafana with pre-configured dashboard
@@ -180,17 +182,20 @@ open http://localhost:3000
 ## Dashboard Panels Explained
 
 ### HTTP Request Rate
+
 - **Query**: `rate(http_requests_total[5m])`
 - **Shows**: Requests per second over time
 - **Use**: Monitor application load
 
 ### Active HTTP Connections
+
 - **Query**: `http_active_connections`
 - **Shows**: Current number of active connections
 - **Use**: Monitor connection pool usage
 
 ### HTTP Request Duration
-- **Queries**: 
+
+- **Queries**:
   - p50: `histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))`
   - p95: `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))`
   - p99: `histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))`
@@ -198,16 +203,19 @@ open http://localhost:3000
 - **Use**: Monitor application performance
 
 ### HTTP Response Size
+
 - **Queries**: `http_response_size_bytes{quantile="0.5|0.9|0.99"}`
 - **Shows**: Response size distribution
 - **Use**: Monitor response payload sizes
 
 ### HTTP Requests by Method and Status
+
 - **Query**: `rate(http_requests_by_method_total[5m])`
 - **Shows**: Request breakdown by HTTP method and status code
 - **Use**: Monitor API usage patterns and error rates
 
 ### Business Metrics
+
 - **Query**: `business_metric_value`
 - **Shows**: Custom business metrics in table format
 - **Use**: Display custom application metrics
@@ -243,6 +251,7 @@ sum(rate(http_requests_total[5m])) by (instance)
 ### Dashboard Shows "No Data"
 
 1. **Check Prometheus is scraping**:
+
    ```bash
    kubectl port-forward -n monitoring svc/prometheus 9090:9090
    # Open http://localhost:9090/targets
@@ -250,12 +259,14 @@ sum(rate(http_requests_total[5m])) by (instance)
    ```
 
 2. **Check metrics are being generated**:
+
    ```bash
    kubectl port-forward -n default svc/dm-nkp-gitops-custom-app 9090:9090
    curl http://localhost:9090/metrics
    ```
 
 3. **Generate traffic**:
+
    ```bash
    for i in {1..50}; do curl http://localhost:8080/; done
    ```
@@ -263,16 +274,19 @@ sum(rate(http_requests_total[5m])) by (instance)
 ### Grafana Can't Connect to Prometheus
 
 1. Check Prometheus service:
+
    ```bash
    kubectl get svc -n monitoring prometheus
    ```
 
 2. Check Grafana datasource configuration:
+
    ```bash
    kubectl get configmap -n monitoring grafana-datasources -o yaml
    ```
 
 3. Verify Prometheus is accessible from Grafana pod:
+
    ```bash
    kubectl exec -n monitoring deployment/grafana -- wget -qO- http://prometheus:9090/api/v1/status/config
    ```
@@ -280,11 +294,13 @@ sum(rate(http_requests_total[5m])) by (instance)
 ### Dashboard Not Appearing
 
 1. Check dashboard ConfigMap:
+
    ```bash
    kubectl get configmap -n monitoring grafana-dashboard
    ```
 
 2. Check Grafana logs:
+
    ```bash
    kubectl logs -n monitoring deployment/grafana
    ```
@@ -323,4 +339,3 @@ business_metric_value
 - [Grafana Documentation](https://grafana.com/docs/grafana/latest/)
 - [Prometheus Query Language](https://prometheus.io/docs/prometheus/latest/querying/basics/)
 - [Dashboard JSON Format](https://grafana.com/docs/grafana/latest/dashboards/json-dashboard/)
-

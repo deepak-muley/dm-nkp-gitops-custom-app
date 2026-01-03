@@ -5,6 +5,7 @@ set -euo pipefail
 # This script verifies that builds work both locally and in Docker
 
 APP_NAME="dm-nkp-gitops-custom-app"
+# shellcheck disable=SC2034  # IMAGE_NAME may be used in future
 IMAGE_NAME="ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0"
 TEST_CONTAINER="dm-nkp-verify-test"
 
@@ -242,4 +243,3 @@ echo "For detailed information, see:"
 echo "  - docs/verification.md"
 echo "  - docs/buildpacks.md"
 echo ""
-

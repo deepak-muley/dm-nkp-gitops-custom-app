@@ -136,20 +136,20 @@ echo_step "Step 8: Deploying monitoring stack (Prometheus + Grafana) using Helm.
 if command -v helm >/dev/null 2>&1; then
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
     helm repo update >/dev/null 2>&1 || true
-    
+
     kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
-    
+
     helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
       --namespace monitoring \
       --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
       --set prometheus.service.type=NodePort \
       --set prometheus.service.nodePort=30090 \
       --wait --timeout=5m >/dev/null 2>&1 || echo_warn "Prometheus installation had issues"
-    
+
     echo "Waiting for monitoring stack..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=2m >/dev/null 2>&1 || echo_warn "Prometheus may not be ready yet"
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=2m >/dev/null 2>&1 || echo_warn "Grafana may not be ready yet"
-    
+
     echo_info "Monitoring stack deployed via Helm"
 else
     echo_warn "Helm not found. Please install Helm to deploy monitoring stack."
@@ -166,7 +166,8 @@ PF_PID=$!
 sleep 3
 
 # Generate traffic
-for i in {1..50}; do
+# shellcheck disable=SC2034  # Loop variable intentionally unused
+for _ in {1..50}; do
     curl -s http://localhost:8080/ >/dev/null 2>&1 || true
     sleep 0.1
 done
@@ -238,4 +239,3 @@ while true; do
     kubectl get pods -n $NAMESPACE -l app=$APP_NAME 2>/dev/null | grep -v NAME || echo_warn "App pods not found"
     kubectl get pods -n monitoring 2>/dev/null | grep -E "(prometheus|grafana)" | grep -v NAME || echo_warn "Monitoring pods not found"
 done
-

@@ -13,6 +13,7 @@ A production-ready Golang application with Prometheus metrics integration, desig
 ## Overview
 
 This is a demo application that demonstrates:
+
 - Prometheus metrics export (Counter, Gauge, Histogram, Summary)
 - Health and readiness endpoints
 - Kubernetes deployment with Helm
@@ -116,6 +117,7 @@ The Grafana dashboard shows comprehensive metrics from the application, includin
 ![Grafana Dashboard - Request Metrics](docs/images/grafana-dashboard-request-metrics.png)
 
 This view shows:
+
 - **Top Metrics Bar**: Key performance indicators including:
   - `n95`: 95th percentile response time (4.75 ms) - showing consistent low latency
   - `p90`: 90th percentile response size (70 B) - indicating stable response payloads
@@ -128,9 +130,10 @@ This view shows:
 ![Grafana Dashboard - Metrics Overview](docs/images/grafana-dashboard-metrics-overview.png)
 
 This comprehensive view displays:
+
 - **HTTP Request Rate**: Line graph showing requests per second (0-0.4 req/s range), with active periods showing consistent ~0.3 req/s traffic
 - **Active HTTP Connections**: Gauge visualization showing zero active connections (indicating stateless request handling)
-- **HTTP Request Duration (Percentiles)**: 
+- **HTTP Request Duration (Percentiles)**:
   - p50 (median): 2.50 ms - half of requests complete in this time or faster
   - p95: 4.75 ms - 95% of requests complete within this duration
   - Both metrics show stable, flat lines indicating consistent performance
@@ -142,13 +145,13 @@ This comprehensive view displays:
 
 1. **Request Rate Patterns**: The line graphs show when traffic is active vs. idle, helping you understand usage patterns and identify peak times.
 
-2. **Performance Metrics**: 
+2. **Performance Metrics**:
    - Low p50 and p95 values (2.5ms and 4.75ms) indicate excellent response times
    - Flat, stable lines mean consistent performance without spikes or degradation
 
 3. **Instance Distribution**: Multiple instances (10.244.0.118, 10.244.0.120) show the application is running in a distributed setup, with requests being load-balanced across instances.
 
-4. **Response Characteristics**: 
+4. **Response Characteristics**:
    - Consistent response sizes (70 B) indicate predictable payloads
    - Zero active connections between requests shows efficient connection handling
 
@@ -177,31 +180,35 @@ For more details on using and customizing the dashboard, see the [Grafana Dashbo
 ### Local Development
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/deepak-muley/dm-nkp-gitops-custom-app.git
    cd dm-nkp-gitops-custom-app
    ```
 
 2. **Install dependencies**:
+
    ```bash
    make deps
    ```
 
 3. **Build the application**:
+
    ```bash
    make build
    ```
 
 4. **Run the application**:
+
    ```bash
    ./bin/dm-nkp-gitops-custom-app
    ```
 
 5. **Access the application**:
-   - Main endpoint: http://localhost:8080
-   - Metrics endpoint: http://localhost:9090/metrics
-   - Health check: http://localhost:8080/health
-   - Readiness check: http://localhost:8080/ready
+   - Main endpoint: <http://localhost:8080>
+   - Metrics endpoint: <http://localhost:9090/metrics>
+   - Health check: <http://localhost:8080/health>
+   - Readiness check: <http://localhost:8080/ready>
 
 ### Running Tests
 
@@ -258,16 +265,19 @@ Access metrics at: `http://localhost:9090/metrics`
 ### Using Helm Chart (Recommended)
 
 1. **Package the Helm chart**:
+
    ```bash
    make helm-chart
    ```
 
 2. **Install using Helm**:
+
    ```bash
    helm install dm-nkp-gitops-custom-app ./chart/dm-nkp-gitops-custom-app
    ```
 
 3. **Push to OCI registry**:
+
    ```bash
    export GITHUB_TOKEN=your_token
    make push-helm-chart
@@ -298,6 +308,7 @@ For existing clusters with Grafana already deployed:
 ```
 
 This script automatically:
+
 - Configures Prometheus as datasource
 - Imports the dashboard
 - Works with any existing cluster setup
@@ -325,16 +336,19 @@ make setup-gateway-api-helm
 ### Using Kubernetes Manifests (Alternative)
 
 1. **Deploy base resources**:
+
    ```bash
    kubectl apply -f manifests/base/
    ```
 
 2. **Deploy Traefik IngressRoute** (if using Traefik):
+
    ```bash
    kubectl apply -f manifests/traefik/
    ```
 
 3. **Deploy Gateway API HTTPRoute** (if using Gateway API):
+
    ```bash
    kubectl apply -f manifests/gateway-api/
    ```
@@ -433,4 +447,3 @@ For more detailed documentation, see:
 ## Author
 
 Deepak Muley
-

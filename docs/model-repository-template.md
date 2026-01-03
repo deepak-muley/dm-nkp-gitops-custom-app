@@ -15,6 +15,7 @@ This document provides a comprehensive guide to all standard files, templates, a
 ## Overview
 
 A model repository should include:
+
 - ✅ Legal and compliance files (LICENSE, SECURITY.md, CODE_OF_CONDUCT.md)
 - ✅ Community health files (CONTRIBUTING.md, CHANGELOG.md)
 - ✅ GitHub templates (Issues, PRs, CODEOWNERS)
@@ -35,6 +36,7 @@ A model repository should include:
 **Customization**: Update copyright year and owner name
 
 **Key Sections**:
+
 - Terms and conditions
 - Grant of copyright license
 - Grant of patent license
@@ -48,6 +50,7 @@ A model repository should include:
 **Template**: See `SECURITY.md` in this repository
 
 **Required Sections**:
+
 - Supported versions table
 - Reporting process (email + GitHub Security Advisories)
 - Response timeline
@@ -56,6 +59,7 @@ A model repository should include:
 - Security checklist
 
 **Customization Points**:
+
 - Replace `security@yourdomain.com` with actual security contact
 - Update supported versions
 - Add project-specific security practices
@@ -67,6 +71,7 @@ A model repository should include:
 **Template**: Contributor Covenant 2.1 (standard)
 
 **Required Sections**:
+
 - Our Pledge
 - Our Standards (positive and negative examples)
 - Enforcement Responsibilities
@@ -74,6 +79,7 @@ A model repository should include:
 - Enforcement Guidelines (Correction, Warning, Temporary Ban, Permanent Ban)
 
 **Customization Points**:
+
 - Update contact method for reporting
 - Add project-specific community guidelines
 
@@ -84,6 +90,7 @@ A model repository should include:
 **Template**: See `CONTRIBUTING.md` in this repository
 
 **Required Sections**:
+
 - Development setup
 - Making changes process
 - Commit message format (Conventional Commits)
@@ -99,11 +106,13 @@ A model repository should include:
 **Template**: See `CHANGELOG.md` in this repository
 
 **Required Sections**:
+
 - [Unreleased] section
 - Version sections with dates
 - Change categories: Added, Changed, Deprecated, Removed, Fixed, Security
 
 **Format**:
+
 ```markdown
 ## [Unreleased]
 
@@ -127,6 +136,7 @@ A model repository should include:
 **Template**: See `README.md` in this repository
 
 **Required Sections**:
+
 - Project description
 - Badges (CI/CD, License, Version, etc.)
 - Features list
@@ -136,6 +146,7 @@ A model repository should include:
 - Contributing guide
 
 **Badges to Include**:
+
 ```markdown
 [![CI](https://github.com/owner/repo/workflows/CI/badge.svg)](link)
 [![CD](https://github.com/owner/repo/workflows/CD/badge.svg)](link)
@@ -150,6 +161,7 @@ A model repository should include:
 
 **Location**: `.github/ISSUE_TEMPLATE/`  
 **Files Required**:
+
 - `bug_report.md`
 - `feature_request.md`
 - `question.md`
@@ -158,6 +170,7 @@ A model repository should include:
 #### Bug Report Template
 
 **Required Fields**:
+
 - Bug description
 - Steps to reproduce
 - Expected vs actual behavior
@@ -167,6 +180,7 @@ A model repository should include:
 - Checklist
 
 **Template Structure**:
+
 ```markdown
 ---
 name: Bug Report
@@ -190,6 +204,7 @@ assignees: ''
 #### Feature Request Template
 
 **Required Fields**:
+
 - Feature description
 - Problem statement
 - Proposed solution
@@ -200,6 +215,7 @@ assignees: ''
 #### Question Template
 
 **Required Fields**:
+
 - Question
 - Context
 - What you've tried
@@ -210,6 +226,7 @@ assignees: ''
 **File**: `.github/ISSUE_TEMPLATE/config.yml`
 
 **Required Sections**:
+
 - `blank_issues_enabled: false` (force template use)
 - Contact links (Security, Documentation)
 
@@ -218,6 +235,7 @@ assignees: ''
 **Location**: `.github/PULL_REQUEST_TEMPLATE.md`
 
 **Required Sections**:
+
 - Description
 - Type of change (checkboxes)
 - Related issues
@@ -229,6 +247,7 @@ assignees: ''
 - Reviewer notes
 
 **Change Types**:
+
 - 🐛 Bug fix
 - ✨ New feature
 - 💥 Breaking change
@@ -244,6 +263,7 @@ assignees: ''
 **Purpose**: Automatic reviewer assignment
 
 **Structure**:
+
 ```
 # Global owners
 * @owner1 @owner2
@@ -255,6 +275,7 @@ assignees: ''
 ```
 
 **Patterns**:
+
 - `*` - All files
 - `/path/` - Directory
 - `*.ext` - File extension
@@ -265,6 +286,7 @@ assignees: ''
 **Location**: `.github/dependabot.yml`
 
 **Required Sections**:
+
 - Version (always `2`)
 - Updates array with:
   - Package ecosystem (gomod, github-actions, docker)
@@ -276,6 +298,7 @@ assignees: ''
   - Reviewers/assignees
 
 **Example**:
+
 ```yaml
 version: 2
 updates:
@@ -293,13 +316,15 @@ updates:
 
 ### 5. Labeler Configuration
 
-**Location**: 
+**Location**:
+
 - `.github/labeler.yml` (file-based labels)
 - Size-based labeling (implemented via GitHub script in label.yml workflow)
 
 **Purpose**: Auto-label PRs based on files changed
 
 **Structure**:
+
 ```yaml
 docs:
   - 'docs/**/*'
@@ -317,6 +342,7 @@ go:
 **Location**: `.pre-commit-config.yaml`
 
 **Required Hooks**:
+
 - `pre-commit-hooks` (trailing whitespace, end-of-file, YAML/JSON check)
 - `pre-commit-golang` (go-fmt, go-vet, golangci-lint)
 - `detect-secrets` (secret scanning)
@@ -325,12 +351,14 @@ go:
 - `yamllint` (YAML linting)
 
 **Installation**:
+
 ```bash
 pip install pre-commit
 pre-commit install
 ```
 
 **Usage**:
+
 ```bash
 pre-commit run --all-files  # Run on all files
 pre-commit run              # Run on staged files
@@ -345,6 +373,7 @@ pre-commit run              # Run on staged files
 **Numbering**: Sequential, starting at 0001
 
 **Template**:
+
 ```markdown
 # ADR-NNNN: Title
 
@@ -366,6 +395,7 @@ pre-commit run              # Run on staged files
 ```
 
 **Required ADRs**:
+
 - ADR-0001: Record Architecture Decisions (meta-ADR)
 - ADR-0002: Technology choices (buildpacks, etc.)
 - ADR-0003: Versioning strategy
@@ -376,6 +406,7 @@ pre-commit run              # Run on staged files
 **Location**: `docs/TROUBLESHOOTING.md`
 
 **Required Sections**:
+
 - Build issues
 - Deployment issues
 - CI/CD issues
@@ -388,6 +419,7 @@ pre-commit run              # Run on staged files
 ### 3. CI/CD Documentation
 
 **Required Documents**:
+
 - `docs/cicd-pipeline.md` - Complete pipeline documentation
 - `docs/github-actions-reference.md` - All workflows documented
 - `docs/github-actions-setup.md` - Setup guide
@@ -396,6 +428,7 @@ pre-commit run              # Run on staged files
 ### 4. Development Documentation
 
 **Required Documents**:
+
 - `docs/development.md` - Development setup
 - `docs/testing.md` - Testing guide
 - `docs/deployment.md` - Deployment guide
@@ -408,6 +441,7 @@ pre-commit run              # Run on staged files
 **Location**: `.github/workflows/ci.yml`
 
 **Required Jobs**:
+
 - `test` - Unit and integration tests
 - `docker-build` - Build Docker images (PRs only)
 - `helm` - Package and validate Helm charts (PRs only)
@@ -416,6 +450,7 @@ pre-commit run              # Run on staged files
 - `kubesec` - Security scanning
 
 **Key Features**:
+
 - Runs on all PRs
 - Runs on pushes to main branches
 - Uploads coverage to Codecov
@@ -427,10 +462,12 @@ pre-commit run              # Run on staged files
 **Location**: `.github/workflows/cd.yml`
 
 **Required Jobs**:
+
 - `build-and-push` - Build, sign, push artifacts
 - `e2e` - Test production artifacts
 
 **Key Features**:
+
 - Runs only on master branch
 - Signs images with cosign
 - Pushes to production registry path
@@ -441,6 +478,7 @@ pre-commit run              # Run on staged files
 **Location**: `.github/workflows/security.yml`
 
 **Required Jobs**:
+
 - `codeql` - Static code analysis
 - `container-scan` - Trivy vulnerability scanning
 - `sbom` - SBOM generation
@@ -448,6 +486,7 @@ pre-commit run              # Run on staged files
 - `license-scan` - License compliance
 
 **Key Features**:
+
 - Runs on PRs, pushes, and daily schedule
 - Uploads results to GitHub Security tab
 - Generates SBOM artifacts
@@ -457,6 +496,7 @@ pre-commit run              # Run on staged files
 **Location**: `.github/workflows/release.yml`
 
 **Key Features**:
+
 - Triggers on version tags
 - Manual dispatch option
 - Generates changelog
@@ -466,6 +506,7 @@ pre-commit run              # Run on staged files
 ### 5. Automation Workflows
 
 **Additional Workflows**:
+
 - `stale.yml` - Manage stale issues/PRs
 - `auto-merge.yml` - Auto-merge Dependabot PRs
 - `label.yml` - Auto-label PRs/issues
@@ -479,6 +520,7 @@ pre-commit run              # Run on staged files
 **Location**: `.golangci.yml` (for Go projects)
 
 **Required Linters**:
+
 - `errcheck` - Error checking
 - `gosimple` - Simplification suggestions
 - `govet` - Go vet
@@ -494,6 +536,7 @@ pre-commit run              # Run on staged files
 **Configuration**: `codecov.yml`
 
 **Required Settings**:
+
 - Coverage status thresholds
 - File paths
 - Flags for different test types
@@ -504,6 +547,7 @@ pre-commit run              # Run on staged files
 **Location**: `/Makefile`
 
 **Required Targets**:
+
 - `help` - Show all targets
 - `deps` - Download dependencies
 - `build` - Build application
@@ -515,9 +559,10 @@ pre-commit run              # Run on staged files
 - `e2e-tests` - Run e2e tests
 
 **Pattern**:
+
 ```makefile
 target: ## Description
-	@command
+ @command
 ```
 
 ## Replication Checklist
@@ -525,18 +570,21 @@ target: ## Description
 Use this checklist when setting up a new repository:
 
 ### Legal & Compliance
+
 - [ ] Create LICENSE file (Apache 2.0)
 - [ ] Create SECURITY.md with security contact
 - [ ] Create CODE_OF_CONDUCT.md
 - [ ] Update copyright in LICENSE
 
 ### Community Files
+
 - [ ] Create CONTRIBUTING.md
 - [ ] Create CHANGELOG.md
 - [ ] Update README.md with badges
 - [ ] Add project description and features
 
 ### GitHub Configuration
+
 - [ ] Create `.github/ISSUE_TEMPLATE/` directory
 - [ ] Create bug_report.md template
 - [ ] Create feature_request.md template
@@ -547,12 +595,14 @@ Use this checklist when setting up a new repository:
 - [ ] Update CODEOWNERS with actual owners
 
 ### Pre-Commit Hooks
+
 - [ ] Create `.pre-commit-config.yaml`
 - [ ] Install pre-commit: `pip install pre-commit`
 - [ ] Install hooks: `pre-commit install`
 - [ ] Test hooks: `pre-commit run --all-files`
 
 ### Documentation
+
 - [ ] Create `docs/adr/` directory
 - [ ] Create ADR-0001 (meta-ADR)
 - [ ] Create ADR-0002+ (technology decisions)
@@ -562,6 +612,7 @@ Use this checklist when setting up a new repository:
 - [ ] Create deployment guide
 
 ### CI/CD Workflows
+
 - [ ] Create `.github/workflows/ci.yml`
 - [ ] Create `.github/workflows/cd.yml`
 - [ ] Create `.github/workflows/security.yml`
@@ -572,24 +623,28 @@ Use this checklist when setting up a new repository:
 - [ ] Create `.github/workflows/performance.yml` (optional)
 
 ### Dependabot
+
 - [ ] Create `.github/dependabot.yml`
 - [ ] Configure for Go modules
 - [ ] Configure for GitHub Actions
 - [ ] Configure for Docker (if applicable)
 
 ### Labeler
+
 - [ ] Create `.github/labeler.yml`
 - [ ] Size-based labeling (implemented in label.yml workflow, no separate config file needed)
 - [ ] Configure file-based labels
 - [ ] Configure size-based labels
 
 ### Code Quality
+
 - [ ] Create `.golangci.yml` (for Go)
 - [ ] Create `codecov.yml`
 - [ ] Update Makefile with standard targets
 - [ ] Configure linting in CI
 
 ### Security
+
 - [ ] Enable GitHub Security features
 - [ ] Set up CodeQL
 - [ ] Configure secret scanning
@@ -597,6 +652,7 @@ Use this checklist when setting up a new repository:
 - [ ] Configure image signing
 
 ### Testing
+
 - [ ] Set up unit tests
 - [ ] Set up integration tests
 - [ ] Set up e2e tests
@@ -604,6 +660,7 @@ Use this checklist when setting up a new repository:
 - [ ] Set up Codecov
 
 ### Final Steps
+
 - [ ] Review all templates for project-specific customization
 - [ ] Update all placeholder values (emails, names, etc.)
 - [ ] Test all workflows
@@ -666,4 +723,3 @@ All template files are available in this repository:
 **Last Updated**: 2024  
 **Repository**: dm-nkp-gitops-custom-app  
 **Purpose**: Reference implementation for model repositories
-

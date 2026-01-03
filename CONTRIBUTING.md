@@ -6,17 +6,20 @@ Thank you for your interest in contributing to dm-nkp-gitops-custom-app!
 
 1. Fork the repository
 2. Clone your fork:
+
    ```bash
    git clone https://github.com/your-username/dm-nkp-gitops-custom-app.git
    cd dm-nkp-gitops-custom-app
    ```
 
 3. Set up development environment:
+
    ```bash
    make deps
    ```
 
 4. Create a feature branch:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -25,11 +28,13 @@ Thank you for your interest in contributing to dm-nkp-gitops-custom-app!
 
 1. Make your changes
 2. Run tests:
+
    ```bash
    make test
    ```
 
 3. Run linters:
+
    ```bash
    make lint
    ```
@@ -39,6 +44,7 @@ Thank you for your interest in contributing to dm-nkp-gitops-custom-app!
 ## Commit Messages
 
 Follow conventional commit format:
+
 - `feat:` for new features
 - `fix:` for bug fixes
 - `docs:` for documentation changes
@@ -47,6 +53,7 @@ Follow conventional commit format:
 - `chore:` for maintenance tasks
 
 Example:
+
 ```
 feat: add new metric for request latency
 ```
@@ -76,4 +83,3 @@ feat: add new metric for request latency
 ## Questions?
 
 Open an issue for questions or discussions.
-

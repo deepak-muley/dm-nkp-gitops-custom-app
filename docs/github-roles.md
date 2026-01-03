@@ -7,7 +7,9 @@ This document explains the different roles and permission levels available in Gi
 GitHub provides five permission levels for repository access:
 
 ### 1. Read (Lowest)
+
 **What they can do:**
+
 - ✅ View repository content
 - ✅ Clone repository
 - ✅ Download releases
@@ -15,6 +17,7 @@ GitHub provides five permission levels for repository access:
 - ✅ Comment on issues and PRs
 
 **What they cannot do:**
+
 - ❌ Push code
 - ❌ Create branches
 - ❌ Modify repository settings
@@ -23,13 +26,16 @@ GitHub provides five permission levels for repository access:
 **Use case:** Viewers, external contributors who only need to see code
 
 ### 2. Triage
+
 **What they can do:**
+
 - ✅ Everything from Read
 - ✅ Manage issues and pull requests (labels, milestones, assignees)
 - ✅ Close/reopen issues and PRs
 - ✅ Mark issues as duplicates
 
 **What they cannot do:**
+
 - ❌ Push code
 - ❌ Create branches
 - ❌ Merge pull requests
@@ -38,7 +44,9 @@ GitHub provides five permission levels for repository access:
 **Use case:** Community managers, issue triagers, project coordinators
 
 ### 3. Write
+
 **What they can do:**
+
 - ✅ Everything from Triage
 - ✅ Push code to non-protected branches
 - ✅ Create branches
@@ -46,6 +54,7 @@ GitHub provides five permission levels for repository access:
 - ✅ Merge pull requests (if allowed by branch protection)
 
 **What they cannot do:**
+
 - ❌ Push to protected branches (without PR)
 - ❌ Modify repository settings
 - ❌ Delete repository
@@ -54,7 +63,9 @@ GitHub provides five permission levels for repository access:
 **Use case:** Regular developers, contributors who need to write code
 
 ### 4. Maintain
+
 **What they can do:**
+
 - ✅ Everything from Write
 - ✅ Manage repository settings (some)
 - ✅ Manage repository variables and secrets
@@ -62,6 +73,7 @@ GitHub provides five permission levels for repository access:
 - ✅ Manage repository actions
 
 **What they cannot do:**
+
 - ❌ Delete repository
 - ❌ Transfer repository
 - ❌ Modify branch protection rules
@@ -71,7 +83,9 @@ GitHub provides five permission levels for repository access:
 **Use case:** Senior developers, team leads, CI/CD managers
 
 ### 5. Admin (Highest)
+
 **What they can do:**
+
 - ✅ Everything from Maintain
 - ✅ Modify all repository settings
 - ✅ Modify branch protection rules
@@ -81,11 +95,13 @@ GitHub provides five permission levels for repository access:
 - ✅ Modify repository visibility
 
 **What they cannot do (with `enforce_admins` enabled):**
+
 - ❌ Push directly to protected branches
 - ❌ Bypass branch protection rules
 - ❌ Force push to protected branches
 
 **What they can still do (even with `enforce_admins`):**
+
 - ✅ Modify branch protection rules (via Settings)
 - ✅ Access repository settings
 - ✅ Manage collaborators
@@ -112,6 +128,7 @@ GitHub provides five permission levels for repository access:
 ## Team Permissions
 
 Teams can have the same permission levels as individual collaborators:
+
 - **pull** (Read)
 - **triage** (Triage)
 - **push** (Write)
@@ -121,24 +138,28 @@ Teams can have the same permission levels as individual collaborators:
 ## Special Roles
 
 ### Repository Owner
+
 - Always has full access
 - Cannot be removed
 - Can transfer/delete repository
 - Not affected by `enforce_admins` for repository management
 
 ### Organization Owner
+
 - Full access to all organization repositories
 - Can manage organization settings
 - Can manage all repositories in the organization
 
 ## Branch Protection and Roles
 
-### With `enforce_admins` enabled:
+### With `enforce_admins` enabled
+
 - **All roles** (including Admin) must follow protection rules
 - No one can push directly to protected branches
 - Everyone needs PRs and approvals
 
-### With `enforce_admins` disabled:
+### With `enforce_admins` disabled
+
 - **Admin and Maintain** roles can bypass protection
 - **Write** and below must follow protection rules
 - Admins can push directly, force push, etc.
@@ -168,4 +189,3 @@ gh api repos/owner/repo/collaborators | jq '.[] | "\(.login): \(.role_name)"'
 - [GitHub Repository Permission Levels](https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/repository-permission-levels-for-an-organization)
 - [GitHub Team Permissions](https://docs.github.com/en/organizations/organizing-members-into-teams/about-teams)
 - [Branch Protection and Roles](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
-

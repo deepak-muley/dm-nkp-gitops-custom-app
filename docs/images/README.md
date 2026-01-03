@@ -23,4 +23,3 @@ Please add the following screenshot files to this directory:
 4. Commit and push to the repository
 
 The README.md in the root directory references these images to demonstrate the working end-to-end setup.
-

@@ -16,10 +16,12 @@ This guide helps you diagnose and resolve common issues with dm-nkp-gitops-custo
 ### Issue: `pack build` fails
 
 **Symptoms:**
+
 - Build fails with builder errors
 - Cannot find builder image
 
 **Solutions:**
+
 ```bash
 # Pull the latest builder
 pack builder pull gcr.io/buildpacks/builder:google-22
@@ -34,10 +36,12 @@ pack build <image> --pull-policy always
 ### Issue: Go module download fails
 
 **Symptoms:**
+
 - `go mod download` fails
 - Network timeouts
 
 **Solutions:**
+
 ```bash
 # Set Go proxy (if behind firewall)
 export GOPROXY=https://proxy.golang.org,direct
@@ -52,10 +56,12 @@ make deps
 ### Issue: Docker image too large
 
 **Symptoms:**
+
 - Image size exceeds expectations
 - Build warnings about size
 
 **Solutions:**
+
 - Use multi-stage builds (if using Dockerfile)
 - Ensure buildpacks are using distroless base images
 - Check for unnecessary files in image
@@ -66,10 +72,12 @@ make deps
 ### Issue: Pod fails to start
 
 **Symptoms:**
+
 - Pod in `CrashLoopBackOff` state
 - Container exits immediately
 
 **Solutions:**
+
 ```bash
 # Check pod logs
 kubectl logs <pod-name> -n <namespace>
@@ -82,6 +90,7 @@ kubectl get pod <pod-name> -n <namespace> -o jsonpath='{.status.containerStatuse
 ```
 
 **Common Causes:**
+
 - Missing environment variables
 - Incorrect image pull secrets
 - Resource constraints
@@ -90,10 +99,12 @@ kubectl get pod <pod-name> -n <namespace> -o jsonpath='{.status.containerStatuse
 ### Issue: Image pull fails
 
 **Symptoms:**
+
 - `ErrImagePull` or `ImagePullBackOff`
 - Authentication errors
 
 **Solutions:**
+
 ```bash
 # Verify image exists
 docker pull ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:<version>
@@ -113,10 +124,12 @@ kubectl create secret docker-registry ghcr-secret \
 ### Issue: Health checks failing
 
 **Symptoms:**
+
 - Pod restarts frequently
 - Readiness probe failures
 
 **Solutions:**
+
 ```bash
 # Test health endpoint manually
 kubectl port-forward <pod-name> 8080:8080 -n <namespace>
@@ -132,10 +145,12 @@ kubectl get deployment <deployment-name> -n <namespace> -o yaml | grep -A 10 pro
 ### Issue: CI workflow fails
 
 **Symptoms:**
+
 - GitHub Actions workflow fails
 - Tests fail in CI but pass locally
 
 **Solutions:**
+
 1. **Check workflow logs:**
    - Go to Actions tab
    - Click on failed workflow run
@@ -148,6 +163,7 @@ kubectl get deployment <deployment-name> -n <namespace> -o yaml | grep -A 10 pro
    - Timeout issues
 
 3. **Debug locally:**
+
    ```bash
    # Run same commands as CI
    make deps
@@ -159,10 +175,12 @@ kubectl get deployment <deployment-name> -n <namespace> -o yaml | grep -A 10 pro
 ### Issue: CD workflow doesn't trigger
 
 **Symptoms:**
+
 - CD workflow doesn't run on master push
 - No artifacts pushed to registry
 
 **Solutions:**
+
 - Verify workflow file exists: `.github/workflows/cd.yml`
 - Check workflow conditions: `if: github.ref == 'refs/heads/master'`
 - Verify branch name is exactly `master`
@@ -171,12 +189,15 @@ kubectl get deployment <deployment-name> -n <namespace> -o yaml | grep -A 10 pro
 ### Issue: Artifacts not pushed
 
 **Symptoms:**
+
 - Build succeeds but artifacts not in registry
 - Authentication errors
 
 **Solutions:**
+
 ```bash
 # Verify GITHUB_TOKEN has write:packages permission
+# Or set GITHUB_PAT secret with write:packages scope (recommended)
 # Check workflow permissions
 # Verify registry path is correct
 ```
@@ -186,10 +207,12 @@ kubectl get deployment <deployment-name> -n <namespace> -o yaml | grep -A 10 pro
 ### Issue: Unit tests fail
 
 **Symptoms:**
+
 - Tests fail locally or in CI
 - Coverage below threshold
 
 **Solutions:**
+
 ```bash
 # Run tests with verbose output
 go test -v ./internal/...
@@ -205,10 +228,12 @@ go tool cover -html=coverage.out
 ### Issue: E2E tests fail
 
 **Symptoms:**
+
 - E2E tests fail in kind cluster
 - Timeout errors
 
 **Solutions:**
+
 ```bash
 # Verify kind cluster is running
 kind get clusters
@@ -226,10 +251,12 @@ kubectl logs -l app=dm-nkp-gitops-custom-app -n <namespace>
 ### Issue: Integration tests fail
 
 **Symptoms:**
+
 - Integration tests fail
 - Server doesn't start
 
 **Solutions:**
+
 ```bash
 # Run with integration tag
 go test -v -tags=integration ./tests/integration/...
@@ -247,16 +274,19 @@ go test -race -tags=integration ./tests/integration/...
 ### Issue: Security scans fail
 
 **Symptoms:**
+
 - CodeQL or Trivy finds vulnerabilities
 - Security workflow fails
 
 **Solutions:**
+
 1. **Review findings:**
    - Go to Security tab
    - Review CodeQL alerts
    - Review dependency alerts
 
 2. **Fix vulnerabilities:**
+
    ```bash
    # Update dependencies
    go get -u ./...
@@ -273,10 +303,12 @@ go test -race -tags=integration ./tests/integration/...
 ### Issue: Secret scanning finds secrets
 
 **Symptoms:**
+
 - Secret scanning alerts
 - Pre-commit hook fails
 
 **Solutions:**
+
 ```bash
 # Remove secrets from git history (if committed)
 git filter-branch --force --index-filter \
@@ -293,10 +325,12 @@ git filter-branch --force --index-filter \
 ### Issue: Slow builds
 
 **Symptoms:**
+
 - Docker builds take too long
 - CI runs are slow
 
 **Solutions:**
+
 - Use build cache
 - Optimize Dockerfile/buildpack configuration
 - Use parallel builds where possible
@@ -305,10 +339,12 @@ git filter-branch --force --index-filter \
 ### Issue: High memory usage
 
 **Symptoms:**
+
 - Pods OOMKilled
 - High memory consumption
 
 **Solutions:**
+
 ```bash
 # Check memory usage
 kubectl top pod <pod-name> -n <namespace>
@@ -371,4 +407,3 @@ make kubesec
 - [Docker Troubleshooting](https://docs.docker.com/config/daemon/)
 - [GitHub Actions Troubleshooting](https://docs.github.com/en/actions/guides/debugging-workflows)
 - [Go Troubleshooting](https://golang.org/doc/faq)
-

@@ -99,4 +99,3 @@ echo ""
 echo "🔍 Check ServiceMonitor for app metrics:"
 echo "  kubectl get servicemonitor -n $MONITORING_NAMESPACE"
 echo ""
-

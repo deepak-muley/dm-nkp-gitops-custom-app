@@ -268,4 +268,3 @@ helm uninstall dm-nkp-gitops-custom-app
 ```bash
 kubectl delete -f manifests/
 ```
-

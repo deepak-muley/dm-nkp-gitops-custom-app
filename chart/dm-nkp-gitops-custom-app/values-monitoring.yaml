@@ -21,4 +21,3 @@ prometheus:
     # Additional labels if using prometheus.prometheusSpec.serviceMonitorSelector
     # labels:
     #   release: prometheus
-
