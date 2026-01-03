@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write  # Required for keyless signing with cosign
     steps:
       - uses: actions/checkout@v4
 
@@ -34,12 +35,23 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
+            BASE_VERSION=${GITHUB_REF#refs/tags/v}
           else
-            VERSION=0.1.0
+            BASE_VERSION=0.1.0
           fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "IMAGE=${{ env.REGISTRY }}/${{ env.APP_NAME }}:$VERSION" >> $GITHUB_OUTPUT
+          GIT_SHA="${{ github.sha }}"
+          GIT_SHA_SHORT="${GIT_SHA:0:7}"
+          # Use immutable versioning with Git SHA to prevent overwrites
+          # Docker images: use '-' (Docker tags don't allow '+')
+          # Helm charts: use '+' (OCI supports it)
+          IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
+          CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE_VERSION=$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
+          echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
+          echo "IMAGE=${{ env.REGISTRY }}/${{ env.APP_NAME }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
         uses: buildpacks/github-actions/setup-pack@v4.3.2
@@ -53,10 +65,35 @@ jobs:
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
             --publish
+          echo "✓ Docker image built and pushed: ${{ steps.version.outputs.IMAGE }}"
+          echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
+
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.1'
+
+      - name: Sign Docker image
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "Signing Docker image with cosign (keyless)..."
+          cosign sign ${{ steps.version.outputs.IMAGE }}
+          echo "✓ Image signed successfully"
+          echo ""
+          echo "To verify the signature:"
+          echo "  cosign verify ${{ steps.version.outputs.IMAGE }}"
 
       - name: Push Helm chart
         run: |
-          helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.VERSION }} --app-version ${{ steps.version.outputs.VERSION }} -d chart/
+          helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.CHART_VERSION }} --app-version ${{ steps.version.outputs.BASE_VERSION }} -d chart/
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.VERSION }}.tgz oci://${{ env.REGISTRY }}
+          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.REGISTRY }}
+          echo "✓ Helm chart pushed with immutable version: ${{ steps.version.outputs.CHART_VERSION }}"
+          echo "Chart reference: oci://${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.CHART_VERSION }}"
+          echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
+          echo ""
+          echo "Note: Image uses '-' (e.g., ${{ steps.version.outputs.IMAGE_VERSION }}), Chart uses '+' (e.g., ${{ steps.version.outputs.CHART_VERSION }})"
 

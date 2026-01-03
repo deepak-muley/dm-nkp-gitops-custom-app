@@ -37,6 +37,24 @@ chart/*.tgz
 .env
 .env.local
 
+# Signing keys and certificates (NEVER commit these!)
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+cosign.key
+cosign.pub
+*.private
+*.secret
+*.crt
+*.cert
+id_rsa
+id_ed25519
+*.pub
+*.gpg
+*.asc
+
 # Build artifacts
 dist/
 build/
