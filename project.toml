@@ -4,7 +4,7 @@ id = "dm-nkp-gitops-custom-app"
 [build]
   [[build.env]]
     name = "GOOGLE_RUNTIME_VERSION"
-    value = "1.25"
+    value = "1.25.5"
 
   [[build.env]]
     name = "GOOGLE_BUILDABLE"

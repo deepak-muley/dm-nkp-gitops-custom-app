@@ -138,7 +138,7 @@ var _ = Describe("E2E Tests", func() {
 		It("should expose metrics endpoint", func() {
 			// Port forward to application
 			portForward := startPortForward(namespace, "dm-nkp-gitops-custom-app", 9090)
-			defer portForward.Process.Kill()
+			defer portForward.Kill()
 
 			time.Sleep(2 * time.Second)
 
@@ -152,7 +152,7 @@ var _ = Describe("E2E Tests", func() {
 		It("should have Prometheus scraping metrics", func() {
 			// Port forward to Prometheus (kube-prometheus-stack service name)
 			portForward := startPortForward("monitoring", "prometheus-kube-prometheus-prometheus", 9090)
-			defer portForward.Process.Kill()
+			defer portForward.Kill()
 
 			time.Sleep(2 * time.Second)
 
@@ -172,7 +172,7 @@ var _ = Describe("E2E Tests", func() {
 		It("should have Grafana accessible with dashboard", func() {
 			// Port forward to Grafana (kube-prometheus-stack service name)
 			portForward := startPortForward("monitoring", "prometheus-grafana", 80)
-			defer portForward.Process.Kill()
+			defer portForward.Kill()
 
 			time.Sleep(3 * time.Second)
 
@@ -363,7 +363,7 @@ func waitForPodsReady(namespace, selector string, timeout time.Duration) {
 func generateTraffic(namespace string, count int) {
 	// Port forward to application
 	portForward := startPortForward(namespace, "dm-nkp-gitops-custom-app", 8080)
-	defer portForward.Process.Kill()
+	defer portForward.Kill()
 
 	time.Sleep(2 * time.Second)
 

@@ -64,7 +64,7 @@ jobs:
         run: |
           pack build test-scan:${{ steps.version.outputs.IMAGE_VERSION }} \
             --builder gcr.io/buildpacks/builder:google-22 \
-            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_RUNTIME_VERSION=1.25.5 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
@@ -120,7 +120,7 @@ jobs:
         run: |
           pack build test-sbom:${{ steps.version.outputs.IMAGE_VERSION }} \
             --builder gcr.io/buildpacks/builder:google-22 \
-            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_RUNTIME_VERSION=1.25.5 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \

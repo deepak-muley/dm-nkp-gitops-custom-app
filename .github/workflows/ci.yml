@@ -75,9 +75,11 @@ jobs:
           go-version: '1.25'
 
       - name: Install kind
-        uses: engineerd/setup-kind@v0.7.0
-        with:
-          version: "v0.20.0"
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
@@ -213,7 +215,7 @@ jobs:
         run: |
           pack build ${{ steps.version.outputs.IMAGE }} \
             --builder gcr.io/buildpacks/builder:google-22 \
-            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_RUNTIME_VERSION=1.25.5 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
