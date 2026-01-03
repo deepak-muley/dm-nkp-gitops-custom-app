@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Semantic version tags (e.g., v1.0.0)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  APP_NAME: dm-nkp-gitops-custom-app
+  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.6.0
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+          excludeLabels: |
+            ignore-for-release
+            duplicate
+            question
+            invalid
+            wontfix
+          header: "# Changelog"
+          footer: ""
+          sections: |
+            [Features]
+            [Fixes]
+            [Security]
+            [Breaking Changes]
+            [Documentation]
+            [Other]
+          oldTag: ${{ github.event.before }}
+          newTag: ${{ steps.version.outputs.TAG }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Release ${{ steps.version.outputs.VERSION }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### Artifacts
+            
+            **Docker Image:**
+            ```
+            ${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.VERSION }}-sha-<sha>
+            ```
+            
+            **Helm Chart:**
+            ```
+            oci://${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.VERSION }}+sha-<sha>
+            ```
+            
+            ### Verification
+            
+            ```bash
+            # Verify image signature
+            cosign verify ${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.VERSION }}-sha-<sha>
+            
+            # Pull and test chart
+            helm pull oci://${{ env.REGISTRY }}/${{ env.APP_NAME }} --version ${{ steps.version.outputs.VERSION }}+sha-<sha>
+            ```
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          generate_release_notes: true
+
+      - name: Upload release artifacts
+        run: |
+          echo "Release artifacts are available in GHCR:"
+          echo "- Docker image: ${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.VERSION }}-sha-<sha>"
+          echo "- Helm chart: oci://${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.VERSION }}+sha-<sha>"
+

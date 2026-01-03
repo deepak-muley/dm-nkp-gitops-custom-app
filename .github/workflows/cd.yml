@@ -5,15 +5,18 @@ on:
     tags:
       - 'v*'
     branches:
-      - main
+      - master  # Run CD on pushes to master branch (not PRs)
 
 env:
   APP_NAME: dm-nkp-gitops-custom-app
-  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+  # Production registry path (master branch)
+  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # Only run on pushes to master branch (not PRs)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -51,10 +54,10 @@ jobs:
           echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
           echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
           echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
-          echo "IMAGE=${{ env.REGISTRY }}/${{ env.APP_NAME }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
-        uses: buildpacks/github-actions/setup-pack@v4.3.2
+        uses: buildpacks/github-actions/setup-pack@v5.0.0
 
       - name: Build and push Docker image
         run: |
@@ -92,8 +95,92 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
           helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.REGISTRY }}
           echo "✓ Helm chart pushed with immutable version: ${{ steps.version.outputs.CHART_VERSION }}"
-          echo "Chart reference: oci://${{ env.REGISTRY }}/${{ env.APP_NAME }}:${{ steps.version.outputs.CHART_VERSION }}"
+          echo "Chart reference: oci://${{ env.REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
           echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
           echo ""
           echo "Note: Image uses '-' (e.g., ${{ steps.version.outputs.IMAGE_VERSION }}), Chart uses '+' (e.g., ${{ steps.version.outputs.CHART_VERSION }})"
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install kind
+        uses: engineerd/setup-kind@v0.7.0
+        with:
+          version: "v0.20.0"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: make deps
+
+      - name: Extract version for e2e
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            BASE_VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            BASE_VERSION=0.1.0
+          fi
+          GIT_SHA="${{ github.sha }}"
+          GIT_SHA_SHORT="${GIT_SHA:0:7}"
+          IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
+          CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
+          echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "Using production image: ${{ env.REGISTRY }}:$IMAGE_VERSION"
+          echo "Using chart version: $CHART_VERSION"
+
+      - name: Pull Docker image from GHCR
+        run: |
+          docker pull ${{ steps.version.outputs.IMAGE }}
+          docker tag ${{ steps.version.outputs.IMAGE }} dm-nkp-gitops-custom-app:test
+          echo "✓ Docker image pulled and tagged for e2e tests"
+
+      - name: Pull Helm chart from GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm pull oci://${{ env.REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/
+          echo "✓ Helm chart pulled for e2e tests"
+
+      - name: Run e2e tests with production artifacts
+        env:
+          E2E_IMAGE_TAG: dm-nkp-gitops-custom-app:test
+          E2E_USE_BUILT_IMAGE: "true"
+        run: |
+          echo "Running e2e tests with production image from GHCR"
+          echo "Image: ${{ steps.version.outputs.IMAGE }}"
+          echo "Chart: ${{ steps.version.outputs.CHART_VERSION }}"
+          make e2e-tests
 

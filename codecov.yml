@@ -1,0 +1,39 @@
+codecov:
+  token: # Set via GitHub secret CODECOV_TOKEN
+  bot: codecov[bot]
+  ci:
+    - github-actions
+  require_ci_to_pass: yes
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+        base: auto
+        branches:
+          - master
+          - main
+    patch:
+      default:
+        target: 80%
+        threshold: 1%
+
+comment:
+  layout: "reach, diff, flags, files, footer"
+  behavior: default
+  require_changes: no
+
+ignore:
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "**/vendor/**"
+  - "**/third_party/**"
+  - "cmd/**"
+  - "tests/**"
+

@@ -1,0 +1,33 @@
+name: Auto-merge Dependencies
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge for Dependabot PRs
+        if: |
+          github.event.pull_request.user.login == 'dependabot[bot]' &&
+          contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+          github.event.pull_request.mergeable == true
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check PR status
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} by ${{ github.event.pull_request.user.login }}"
+          echo "Labels: ${{ join(github.event.pull_request.labels.*.name, ', ') }}"
+          echo "Mergeable: ${{ github.event.pull_request.mergeable }}"
+          echo "Status checks must pass before auto-merge"
+

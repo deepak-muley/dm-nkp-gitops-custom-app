@@ -1,11 +1,8 @@
-.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm
+.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm setup-pre-commit pre-commit pre-commit-update
 
 # Variables
 APP_NAME := dm-nkp-gitops-custom-app
 VERSION := 0.1.0
-REGISTRY := ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
-HELM_CHART_NAME := $(APP_NAME)
-HELM_REPO := oci://$(REGISTRY)
 GO_VERSION := 1.25
 BUILD_DIR := bin
 COVERAGE_DIR := coverage
@@ -15,6 +12,19 @@ PUBLIC ?= false
 IMMUTABLE ?= true
 # Set SIGN=true to sign container images with cosign (default: false)
 SIGN ?= false
+# Set REGISTRY_PATH=dev to use /dev path (for PR branches), or leave empty for production (master)
+# Auto-detects based on current branch: uses /dev for non-master branches, main path for master
+REGISTRY_PATH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -qE '^(master|main)$$' && echo "" || echo "dev")
+# Base registry (without path suffix)
+REGISTRY_BASE := ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
+# Full registry path (with /dev suffix for PR branches, without for master)
+ifeq ($(REGISTRY_PATH),dev)
+  REGISTRY := $(REGISTRY_BASE)/dev
+else
+  REGISTRY := $(REGISTRY_BASE)
+endif
+HELM_CHART_NAME := $(APP_NAME)
+HELM_REPO := oci://$(REGISTRY)
 
 # Generate immutable version with Git SHA if IMMUTABLE=true, otherwise use base VERSION
 # Note: Docker image tags cannot contain '+', so we use '-' for images and '+' for Helm charts
@@ -111,6 +121,7 @@ helm-chart: ## Package Helm chart (use IMMUTABLE=false to disable Git SHA in ver
 		exit 1; \
 	fi
 	@echo "Packaging Helm chart with version: $(HELM_CHART_VERSION)"
+	@echo "Registry: $(REGISTRY) ($(if $(filter dev,$(REGISTRY_PATH)),dev branch,production))"
 	helm package chart/$(APP_NAME) --version $(HELM_CHART_VERSION) --app-version $(VERSION) -d chart/
 	@echo "Helm chart packaged: chart/$(APP_NAME)-$(HELM_CHART_VERSION).tgz"
 
@@ -131,6 +142,7 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
 			exit 1; \
 		fi; \
+		echo "Registry: $(REGISTRY) ($(if $(filter dev,$(REGISTRY_PATH)),dev branch,production))"; \
 		echo "Logging in to GHCR..."; \
 		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin; \
 		echo "Pushing Helm chart $(HELM_CHART_VERSION) to $(HELM_REPO)..."; \
@@ -351,6 +363,7 @@ docker-build: ## Build Docker image using buildpacks (use IMMUTABLE=false to dis
 		exit 1; \
 	fi
 	@echo "Building Docker image with version: $(IMAGE_VERSION)"
+	@echo "Registry: $(REGISTRY) ($(if $(filter dev,$(REGISTRY_PATH)),dev branch,production))"
 	pack build $(IMAGE) \
 		--builder gcr.io/buildpacks/builder:google-22 \
 		--env GOOGLE_RUNTIME_VERSION=$(GO_VERSION) \
@@ -359,7 +372,7 @@ docker-build: ## Build Docker image using buildpacks (use IMMUTABLE=false to dis
 		--env METRICS_PORT=9090
 	@echo "✓ Docker image built: $(IMAGE)"
 
-docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign with cosign)
+docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign with cosign, REGISTRY_PATH=dev for dev path)
 	@bash -c '\
 		if [ -f .env.local ]; then \
 			. .env.local; \
@@ -372,6 +385,7 @@ docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign 
 			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
 			exit 1; \
 		fi; \
+		echo "Registry: $(REGISTRY) ($(if $(filter dev,$(REGISTRY_PATH)),dev branch,production))"; \
 		echo "Logging in to GHCR..."; \
 		docker login ghcr.io -u $(shell git config user.name) -p $$GITHUB_TOKEN; \
 		echo "Pushing Docker image $(IMAGE)..."; \
@@ -506,6 +520,42 @@ setup-gateway-api-helm: ## Set up Gateway API with Traefik using Helm
 		exit 1; \
 	fi
 	./scripts/setup-gateway-api-helm.sh
+
+setup-pre-commit: ## Set up pre-commit hooks using Python virtual environment
+	@./scripts/setup-pre-commit.sh
+
+pre-commit: ## Run pre-commit hooks on staged files (requires venv activation: source .venv/bin/activate)
+	@if [ ! -d ".venv" ]; then \
+		echo "Error: Virtual environment not found. Run 'make setup-pre-commit' first"; \
+		exit 1; \
+	fi
+	@if ! command -v pre-commit > /dev/null; then \
+		echo "Error: pre-commit not found. Activate venv first: source .venv/bin/activate"; \
+		exit 1; \
+	fi
+	@pre-commit run
+
+pre-commit-all: ## Run pre-commit hooks on all files (requires venv activation: source .venv/bin/activate)
+	@if [ ! -d ".venv" ]; then \
+		echo "Error: Virtual environment not found. Run 'make setup-pre-commit' first"; \
+		exit 1; \
+	fi
+	@if ! command -v pre-commit > /dev/null; then \
+		echo "Error: pre-commit not found. Activate venv first: source .venv/bin/activate"; \
+		exit 1; \
+	fi
+	@pre-commit run --all-files
+
+pre-commit-update: ## Update pre-commit hooks (requires venv activation: source .venv/bin/activate)
+	@if [ ! -d ".venv" ]; then \
+		echo "Error: Virtual environment not found. Run 'make setup-pre-commit' first"; \
+		exit 1; \
+	fi
+	@if ! command -v pre-commit > /dev/null; then \
+		echo "Error: pre-commit not found. Activate venv first: source .venv/bin/activate"; \
+		exit 1; \
+	fi
+	@pre-commit autoupdate
 
 all: clean deps lint build test ## Run all: clean, deps, lint, build, test
 
