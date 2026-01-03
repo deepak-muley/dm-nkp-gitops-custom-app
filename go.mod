@@ -1,6 +1,6 @@
 module github.com/deepak-muley/dm-nkp-gitops-custom-app
 
-go 1.25
+go 1.23
 
 require (
 	github.com/onsi/ginkgo/v2 v2.15.0
