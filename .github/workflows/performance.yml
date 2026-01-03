@@ -27,7 +27,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: Install kind
         run: |
@@ -46,7 +46,7 @@ jobs:
         run: |
           pack build test-perf:latest \
             --builder gcr.io/buildpacks/builder:google-22 \
-            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_RUNTIME_VERSION=1.23 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
@@ -118,7 +118,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: Install kind
         run: |
@@ -137,7 +137,7 @@ jobs:
         run: |
           pack build test-resource:latest \
             --builder gcr.io/buildpacks/builder:google-22 \
-            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_RUNTIME_VERSION=1.23 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
