@@ -1,9 +1,9 @@
 # dm-nkp-gitops-custom-app
 
-[![CI](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CI/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/ci.yml)
-[![CD](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CD/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/cd.yml)
-[![Security Scanning](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/Security%20Scanning/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app/badge)](https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app)
+[![CI](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/ci.yml/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/ci.yml)
+[![CD](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/cd.yml/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/cd.yml)
+[![Security Scanning](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/deepak-muley/dm-nkp-gitops-custom-app/badge)](https://securityscorecards.dev/viewer/?uri=github.com/deepak-muley/dm-nkp-gitops-custom-app)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
 [![Kubernetes](https://img.shields.io/badge/kubernetes-1.28+-blue.svg)](https://kubernetes.io/)
