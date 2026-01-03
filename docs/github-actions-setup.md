@@ -106,7 +106,7 @@ git push origin v1.0.0
 
 **Files:**
 - `.github/labeler.yml` - File-based labels
-- `.github/labeler-size.yml` - Size-based labels
+- Size-based labeling (implemented via GitHub script in label.yml workflow)
 
 **Automatic:** Labels applied on PR creation
 

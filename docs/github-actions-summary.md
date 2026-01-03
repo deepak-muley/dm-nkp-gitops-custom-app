@@ -58,7 +58,7 @@ This document provides a quick reference of all GitHub Actions workflows configu
   - Automated dependency updates
   - Weekly schedule for Go, Actions, Docker
 
-- **Labeler Config** (`.github/labeler.yml`, `.github/labeler-size.yml`)
+- **Labeler Config** (`.github/labeler.yml` for file-based labels, size-based labels via GitHub script)
   - Auto-labeling rules
   - File-based and size-based labels
 

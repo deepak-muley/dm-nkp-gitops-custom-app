@@ -295,7 +295,7 @@ updates:
 
 **Location**: 
 - `.github/labeler.yml` (file-based labels)
-- `.github/labeler-size.yml` (size-based labels)
+- Size-based labeling (implemented via GitHub script in label.yml workflow)
 
 **Purpose**: Auto-label PRs based on files changed
 
@@ -579,7 +579,7 @@ Use this checklist when setting up a new repository:
 
 ### Labeler
 - [ ] Create `.github/labeler.yml`
-- [ ] Create `.github/labeler-size.yml`
+- [ ] Size-based labeling (implemented in label.yml workflow, no separate config file needed)
 - [ ] Configure file-based labels
 - [ ] Configure size-based labels
 
