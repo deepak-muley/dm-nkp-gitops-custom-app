@@ -1,0 +1,47 @@
+# CODEOWNERS file
+# This file defines code owners for automatic PR review assignment
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners - these users will be requested for review on all PRs
+* @deepak-muley
+
+# Documentation
+/docs/ @deepak-muley
+*.md @deepak-muley
+README.md @deepak-muley
+CONTRIBUTING.md @deepak-muley
+CHANGELOG.md @deepak-muley
+
+# CI/CD and GitHub workflows
+/.github/ @deepak-muley
+/.github/workflows/ @deepak-muley
+/.github/dependabot.yml @deepak-muley
+
+# Helm charts
+/chart/ @deepak-muley
+/manifests/ @deepak-muley
+
+# Security-related files
+SECURITY.md @deepak-muley
+/.github/workflows/security.yml @deepak-muley
+/scripts/check-secrets.sh @deepak-muley
+
+# Go code
+*.go @deepak-muley
+/go.mod @deepak-muley
+/go.sum @deepak-muley
+
+# Configuration files
+Makefile @deepak-muley
+.golangci.yml @deepak-muley
+.pre-commit-config.yaml @deepak-muley
+codecov.yml @deepak-muley
+
+# Scripts
+/scripts/ @deepak-muley
+
+# Docker and build files
+Dockerfile @deepak-muley
+project.toml @deepak-muley
+.dockerignore @deepak-muley
+

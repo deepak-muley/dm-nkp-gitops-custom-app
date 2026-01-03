@@ -1,6 +1,14 @@
 # dm-nkp-gitops-custom-app
 
-A simple Golang application with Prometheus metrics integration, designed for deployment in Nutanix NKP (Nutanix Kubernetes Platform) infrastructure.
+[![CI](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CI/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/ci.yml)
+[![CD](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CD/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/cd.yml)
+[![Security Scanning](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/Security%20Scanning/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
+[![CodeQL](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/workflows/CodeQL/badge.svg)](https://github.com/deepak-muley/dm-nkp-gitops-custom-app/actions/workflows/security.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
+[![Kubernetes](https://img.shields.io/badge/kubernetes-1.28+-blue.svg)](https://kubernetes.io/)
+
+A production-ready Golang application with Prometheus metrics integration, designed for deployment in Nutanix NKP (Nutanix Kubernetes Platform) infrastructure. This repository serves as a **reference implementation** for building cloud-native applications with comprehensive CI/CD, security scanning, and best practices.
 
 ## Overview
 
@@ -24,6 +32,14 @@ This is a demo application that demonstrates:
 - **CI/CD**: Automated testing and deployment via GitHub Actions
 - **Security Scanning**: Kubesec integration for security validation
 - **Distroless Images**: Secure, minimal container images using buildpacks
+
+## Documentation
+
+- **[Model Repository Template](docs/model-repository-template.md)** - Complete guide to replicating this repository setup
+- **[CI/CD Pipeline](docs/cicd-pipeline.md)** - Complete CI/CD documentation
+- **[GitHub Actions Reference](docs/github-actions-reference.md)** - All workflows documented
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Architecture Decision Records](docs/adr/)** - Technical decision documentation
 
 ## Project Structure
 

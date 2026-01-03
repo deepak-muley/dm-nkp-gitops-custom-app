@@ -1,0 +1,47 @@
+# Auto-label PRs and issues based on files changed
+
+docs:
+  - 'docs/**/*'
+  - '*.md'
+  - 'README.md'
+  - 'CHANGELOG.md'
+
+ci:
+  - '.github/workflows/**/*'
+  - '.github/dependabot.yml'
+  - '.github/labeler*.yml'
+
+helm:
+  - 'chart/**/*'
+  - 'manifests/**/*'
+
+docker:
+  - 'Dockerfile*'
+  - '.dockerignore'
+  - 'project.toml'
+
+go:
+  - '**/*.go'
+  - 'go.mod'
+  - 'go.sum'
+
+security:
+  - '.github/workflows/security.yml'
+  - 'scripts/check-secrets.sh'
+  - '**/*security*'
+
+testing:
+  - 'tests/**/*'
+  - '**/*_test.go'
+  - '.github/workflows/ci.yml'
+
+scripts:
+  - 'scripts/**/*'
+  - 'Makefile'
+
+config:
+  - '*.yaml'
+  - '*.yml'
+  - '*.toml'
+  - '*.json'
+

@@ -37,6 +37,12 @@ chart/*.tgz
 .env
 .env.local
 
+# Python virtual environment
+.venv/
+venv/
+ENV/
+env/
+
 # Signing keys and certificates (NEVER commit these!)
 *.key
 *.pem

@@ -12,6 +12,8 @@ env:
   VERSION: 0.1.0
   REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
   IMAGE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0
+  # Use /dev path for PR branches, main path for master
+  DEV_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app/dev
 
 jobs:
   test:
@@ -51,9 +53,19 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/unit-coverage.out
+          flags: unit
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+          # Enable PR comments
+          enable_network: true
+          # Show coverage in PR
+          show_comparison: true
 
   e2e:
     runs-on: ubuntu-latest
+    needs: [docker-build, helm]
     steps:
       - uses: actions/checkout@v4
 
@@ -70,6 +82,14 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
 
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Cache Go modules
         uses: actions/cache@v3
         with:
@@ -81,8 +101,56 @@ jobs:
       - name: Download dependencies
         run: make deps
 
-      - name: Run e2e tests
-        run: make e2e-tests
+      - name: Download Helm chart artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: helm-chart
+          path: chart/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version for e2e
+        id: version
+        run: |
+          GIT_SHA="${{ github.sha }}"
+          GIT_SHA_SHORT="${GIT_SHA:0:7}"
+          BASE_VERSION="0.1.0"
+          IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
+          CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
+          DEV_IMAGE="${{ env.DEV_REGISTRY }}:${IMAGE_VERSION}"
+          echo "IMAGE=$DEV_IMAGE" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=dm-nkp-gitops-custom-app:test" >> $GITHUB_OUTPUT
+          echo "Using PR image from dev path: $DEV_IMAGE"
+
+      - name: Pull Docker image from dev path
+        run: |
+          docker pull ${{ steps.version.outputs.IMAGE }}
+          docker tag ${{ steps.version.outputs.IMAGE }} ${{ steps.version.outputs.IMAGE_TAG }}
+          echo "✓ Docker image pulled from dev path and tagged for e2e tests"
+
+      - name: Pull Helm chart from dev path
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm pull oci://${{ env.DEV_REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/ || echo "Chart not found, will use local"
+          echo "✓ Helm chart pulled from dev path (if available)"
+
+      - name: Run e2e tests with built artifacts
+        env:
+          E2E_IMAGE_TAG: ${{ steps.version.outputs.IMAGE_TAG }}
+          E2E_USE_BUILT_IMAGE: "true"
+        run: |
+          echo "Running e2e tests with image: $E2E_IMAGE_TAG"
+          echo "Helm chart available at: chart/"
+          make e2e-tests
 
   build:
     runs-on: ubuntu-latest
@@ -107,39 +175,59 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     needs: [test]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract version for testing
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version for PR
         id: version
         run: |
           GIT_SHA="${{ github.sha }}"
           GIT_SHA_SHORT="${GIT_SHA:0:7}"
-          TEST_VERSION="0.1.0-sha-${GIT_SHA_SHORT}"
-          echo "IMAGE_VERSION=$TEST_VERSION" >> $GITHUB_OUTPUT
-          echo "Building test image with version: $TEST_VERSION"
+          BASE_VERSION="0.1.0"
+          IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
+          IMAGE="${{ env.DEV_REGISTRY }}:${IMAGE_VERSION}"
+          echo "IMAGE_VERSION=$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE=$IMAGE" >> $GITHUB_OUTPUT
+          echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
+          echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
+          echo "Building PR image: $IMAGE"
 
       - name: Install pack CLI
         uses: buildpacks/github-actions/setup-pack@v4.3.2
 
-      - name: Build Docker image (test only, not pushed)
+      - name: Build and push Docker image to dev path
         run: |
-          pack build test-image:${{ steps.version.outputs.IMAGE_VERSION }} \
+          pack build ${{ steps.version.outputs.IMAGE }} \
             --builder gcr.io/buildpacks/builder:google-22 \
             --env GOOGLE_RUNTIME_VERSION=1.25 \
             --env GOOGLE_BUILDABLE=./cmd/app \
             --env PORT=8080 \
             --env METRICS_PORT=9090 \
-            --pull-policy if-not-present
-          echo "✓ Docker image built successfully (test build, not pushed)"
-          docker images | grep test-image
+            --publish
+          echo "✓ Docker image built and pushed to dev path: ${{ steps.version.outputs.IMAGE }}"
+          echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
 
   helm:
     runs-on: ubuntu-latest
     needs: [test]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -147,6 +235,18 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+
+      - name: Extract version for PR
+        id: version
+        run: |
+          GIT_SHA="${{ github.sha }}"
+          GIT_SHA_SHORT="${GIT_SHA:0:7}"
+          BASE_VERSION="0.1.0"
+          CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
+          echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
+          echo "Packaging Helm chart with version: $CHART_VERSION"
 
       - name: Package Helm chart
         run: make helm-chart
@@ -157,7 +257,15 @@ jobs:
           helm template test-release chart/${{ env.APP_NAME }} | head -20
           echo "✓ Helm chart packaged and validated successfully"
 
-      - name: Upload Helm chart
+      - name: Push Helm chart to dev path
+        run: |
+          helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.CHART_VERSION }} --app-version 0.1.0 -d chart/
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.DEV_REGISTRY }}
+          echo "✓ Helm chart pushed to dev path: oci://${{ env.DEV_REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
+          echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
+
+      - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v3
         with:
           name: helm-chart

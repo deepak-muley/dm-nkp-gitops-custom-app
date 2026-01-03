@@ -1,0 +1,32 @@
+# Label PRs by size (number of lines changed)
+
+size/XS:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      count: 1
+      label: 'size/XS'
+
+size/S:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      count: 10
+      label: 'size/S'
+
+size/M:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      count: 30
+      label: 'size/M'
+
+size/L:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      count: 100
+      label: 'size/L'
+
+size/XL:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      count: 500
+      label: 'size/XL'
+

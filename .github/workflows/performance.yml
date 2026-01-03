@@ -1,0 +1,159 @@
+name: Performance Testing
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  APP_NAME: dm-nkp-gitops-custom-app
+
+jobs:
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install kind
+        uses: engineerd/setup-kind@v0.7.0
+        with:
+          version: "v0.20.0"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for testing
+        run: |
+          pack build test-perf:latest \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_BUILDABLE=./cmd/app \
+            --env PORT=8080 \
+            --env METRICS_PORT=9090 \
+            --pull-policy if-not-present
+
+      - name: Create kind cluster
+        run: |
+          kind create cluster --name perf-test --wait 5m
+
+      - name: Load image into kind
+        run: |
+          kind load docker-image test-perf:latest --name perf-test
+
+      - name: Deploy application
+        run: |
+          kubectl create namespace perf-test || true
+          kubectl apply -f manifests/base/ -n perf-test
+          kubectl set image deployment/${{ env.APP_NAME }} app=test-perf:latest -n perf-test
+          kubectl rollout status deployment/${{ env.APP_NAME }} -n perf-test --timeout=5m
+
+      - name: Wait for application to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=${{ env.APP_NAME }} -n perf-test --timeout=5m
+          sleep 10
+
+      - name: Run basic performance tests
+        run: |
+          echo "Running basic performance tests..."
+          
+          # Get service endpoint
+          kubectl port-forward -n perf-test svc/${{ env.APP_NAME }} 8080:8080 &
+          PF_PID=$!
+          sleep 5
+          
+          # Basic load test with curl
+          echo "Testing endpoint response times..."
+          for i in {1..100}; do
+            curl -s -o /dev/null -w "%{time_total}\n" http://localhost:8080/ > /tmp/times.txt || true
+          done
+          
+          # Calculate average response time
+          AVG_TIME=$(awk '{sum+=$1; count++} END {print sum/count}' /tmp/times.txt)
+          echo "Average response time: ${AVG_TIME}s"
+          
+          # Check if average is reasonable (< 1 second)
+          # Using awk for comparison (more portable than bc)
+          AVG_CHECK=$(awk -v avg="$AVG_TIME" 'BEGIN {print (avg > 1.0)}')
+          if [ "$AVG_CHECK" = "1" ]; then
+            echo "⚠️ Warning: Average response time exceeds 1 second"
+            exit 1
+          fi
+          
+          kill $PF_PID || true
+          echo "✓ Performance tests passed"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kind delete cluster --name perf-test || true
+
+  resource-usage:
+    name: Resource Usage Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install kind
+        uses: engineerd/setup-kind@v0.7.0
+        with:
+          version: "v0.20.0"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          pack build test-resource:latest \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_RUNTIME_VERSION=1.25 \
+            --env GOOGLE_BUILDABLE=./cmd/app \
+            --env PORT=8080 \
+            --env METRICS_PORT=9090 \
+            --pull-policy if-not-present
+
+      - name: Check image size
+        run: |
+          IMAGE_SIZE=$(docker images test-resource:latest --format "{{.Size}}")
+          echo "Image size: $IMAGE_SIZE"
+          echo "IMAGE_SIZE=$IMAGE_SIZE" >> $GITHUB_ENV
+          
+          # Extract numeric size (remove units)
+          SIZE_NUM=$(echo $IMAGE_SIZE | sed 's/[^0-9.]//g')
+          echo "Image size (numeric): $SIZE_NUM"
+          
+          # Warn if image is too large (> 500MB)
+          # Extract numeric value and compare
+          SIZE_CHECK=$(awk -v size="$SIZE_NUM" 'BEGIN {print (size > 500)}')
+          if [ "$SIZE_CHECK" = "1" ]; then
+            echo "⚠️ Warning: Image size exceeds 500MB"
+          else
+            echo "✓ Image size is acceptable"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rmi test-resource:latest || true
+
