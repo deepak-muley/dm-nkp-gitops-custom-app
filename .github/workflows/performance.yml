@@ -77,7 +77,7 @@ jobs:
           # Basic load test with curl
           echo "Testing endpoint response times..."
           for i in {1..100}; do
-            curl -s -o /dev/null -w "%{time_total}\n" http://localhost:8080/ > /tmp/times.txt || true
+            curl -s -o /dev/null -w "%{time_total}\n" http://localhost:8080/ >> /tmp/times.txt || true
           done
           
           # Calculate average response time
@@ -151,6 +151,7 @@ jobs:
             echo "⚠️ Warning: Image size exceeds 500MB"
           else
             echo "✓ Image size is acceptable"
+          fi
 
       - name: Cleanup
         if: always()
