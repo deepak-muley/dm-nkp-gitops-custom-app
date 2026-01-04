@@ -55,11 +55,13 @@ Key design decisions:
 
 **Development (from PR or local non-master branch):**
 - Container Image: `ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app:0.1.0-sha-abc1234`
-- Helm Chart: `oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app-chart:0.1.0+sha-abc1234`
+- Helm Chart: `oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app:0.1.0+sha-abc1234`
+  - Note: Helm automatically appends the chart name from `Chart.yaml` to the OCI registry path
 
 **Production (from master branch or tags):**
 - Container Image: `ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app:0.1.0-sha-abc1234`
-- Helm Chart: `oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart:0.1.0+sha-abc1234`
+- Helm Chart: `oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app:0.1.0+sha-abc1234`
+  - Note: Helm automatically appends the chart name from `Chart.yaml` to the OCI registry path
 
 ### Usage Examples
 
@@ -70,11 +72,13 @@ docker pull ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-cus
 
 **Pull and use Helm chart:**
 ```bash
-helm pull oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart:0.1.0+sha-abc1234
-helm install my-app oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+# Helm automatically appends chart name from Chart.yaml, so include it in the path
+helm pull oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
+helm install my-app oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 ```
 
 **Show Helm chart values:**
 ```bash
-helm show values oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+# Note: Helm converts + to _ in tags when pushing, but you can use + when pulling
+helm show values oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 ```

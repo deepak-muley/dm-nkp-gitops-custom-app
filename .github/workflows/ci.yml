@@ -146,9 +146,12 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
           echo "Attempting to pull chart with version: ${{ steps.version.outputs.CHART_VERSION }}"
-          echo "Chart registry: ${{ env.DEV_CHART_REGISTRY }}"
-          # Quote the version to handle + character properly
-          helm pull "oci://${{ env.DEV_CHART_REGISTRY }}" --version "${{ steps.version.outputs.CHART_VERSION }}" -d chart/ || echo "Chart not found, will use local"
+          # Helm automatically appends chart name from Chart.yaml to the OCI registry path
+          # So the full path is: {DEV_CHART_REGISTRY}/{APP_NAME}
+          CHART_PATH="${{ env.DEV_CHART_REGISTRY }}/${{ env.APP_NAME }}"
+          echo "Chart path: oci://$CHART_PATH"
+          # Quote the version to handle + character properly (Helm converts + to _ in tags automatically)
+          helm pull "oci://$CHART_PATH" --version "${{ steps.version.outputs.CHART_VERSION }}" -d chart/ || echo "Chart not found, will use local"
           echo "✓ Helm chart pulled from dev path (if available)"
 
       - name: Run e2e tests with built artifacts
