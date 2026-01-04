@@ -9,8 +9,9 @@ on:
 
 env:
   APP_NAME: dm-nkp-gitops-custom-app
-  # Production registry path (master branch)
-  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
+  REGISTRY_BASE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+  # Production registry path (master branch) - clear /prod/ prefix for easy identification
+  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app
 
 jobs:
   build-and-push:
