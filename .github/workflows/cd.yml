@@ -82,7 +82,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           echo "Signing Docker image with cosign (keyless)..."
-          cosign sign ${{ steps.version.outputs.IMAGE }}
+          cosign sign --yes ${{ steps.version.outputs.IMAGE }}
           echo "✓ Image signed successfully"
           echo ""
           echo "To verify the signature:"
