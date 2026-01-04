@@ -10,10 +10,9 @@ on:
 env:
   APP_NAME: dm-nkp-gitops-custom-app
   VERSION: 0.1.0
-  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
-  IMAGE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0
-  # Use /dev path for PR branches, main path for master
-  DEV_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app/dev
+  REGISTRY_BASE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+  # Use /dev path for PR branches - clear environment prefix for easy identification
+  DEV_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app
 
 jobs:
   test:
