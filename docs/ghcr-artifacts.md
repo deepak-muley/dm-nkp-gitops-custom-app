@@ -48,23 +48,28 @@ crane ls ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom
 
 ```bash
 # Pull chart
-helm pull oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+# Note: Helm automatically appends chart name from Chart.yaml to the OCI registry path
+helm pull oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 
 # Install chart
-helm install my-app oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+helm install my-app oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 
 # Show chart info
-helm show chart oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+helm show chart oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 
 # Show chart values
-helm show values oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
+helm show values oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app --version 0.1.0+sha-abc1234
 ```
 
-**Note:** 
+**Note:**
 - Container images use `-` in tags (e.g., `0.1.0-sha-abc1234`)
 - Helm charts use `+` in versions (e.g., `0.1.0+sha-abc1234`)
 - Helm charts have `-chart` suffix in the package name
+- **Helm automatically appends the chart name from `Chart.yaml` to the OCI registry path**
+  - Push to: `oci://ghcr.io/.../dev/dm-nkp-gitops-custom-app-chart`
+  - Actual path: `ghcr.io/.../dev/dm-nkp-gitops-custom-app-chart/dm-nkp-gitops-custom-app`
 - Use `/dev/` path for development, `/prod/` path for production
+- Helm converts `+` to `_` in tags when pushing (OCI limitation), but you can use `+` when pulling
 
 ### 3. **By Media Type**
 
@@ -189,7 +194,7 @@ crane ls ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
 check_artifact_type() {
   local ref=$1
   local manifest=$(crane manifest "$ref" 2>/dev/null)
-  
+
   if echo "$manifest" | jq -e '.annotations."org.opencontainers.image.title"' > /dev/null 2>&1; then
     echo "Helm Chart"
   elif echo "$manifest" | jq -e '.config' > /dev/null 2>&1; then

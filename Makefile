@@ -25,8 +25,12 @@ HELM_CHART_PACKAGE := $(APP_NAME)-chart
 # Full registry paths with environment prefix and explicit package names
 # Format: ghcr.io/owner/repo/{dev|prod}/{package-name}
 IMAGE_REGISTRY := $(REGISTRY_BASE)/$(REGISTRY_ENV)/$(IMAGE_PACKAGE)
+# Helm automatically appends chart name from Chart.yaml to OCI registry path
+# So the actual path will be: {HELM_CHART_REGISTRY}/{CHART_NAME}
 HELM_CHART_REGISTRY := $(REGISTRY_BASE)/$(REGISTRY_ENV)/$(HELM_CHART_PACKAGE)
 HELM_CHART_NAME := $(APP_NAME)
+# Full Helm chart path includes the chart name (Helm appends it automatically)
+HELM_CHART_FULL_PATH := $(HELM_CHART_REGISTRY)/$(HELM_CHART_NAME)
 HELM_REPO := oci://$(HELM_CHART_REGISTRY)
 
 # Generate immutable version with Git SHA if IMMUTABLE=true, otherwise use base VERSION
@@ -218,12 +222,14 @@ helm-show-values: ## Show Helm chart values (use CHART_VERSION=0.1.0+sha-abc123 
 		fi; \
 		echo "Showing values for Helm chart version: $$CHART_VERSION"; \
 		echo "Chart registry: $(HELM_CHART_REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		echo "Note: Helm automatically appends chart name, so full path is: $(HELM_CHART_FULL_PATH)"; \
 		echo ""; \
+		CHART_FULL_PATH="$(HELM_CHART_FULL_PATH)"; \
 		echo "Command:"; \
-		echo "  helm show values $(HELM_REPO) --version $$CHART_VERSION"; \
+		echo "  helm show values oci://$$CHART_FULL_PATH --version $$CHART_VERSION"; \
 		echo ""; \
 		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin > /dev/null 2>&1; \
-		helm show values $(HELM_REPO) --version $$CHART_VERSION'
+		helm show values "oci://$$CHART_FULL_PATH" --version "$$CHART_VERSION"'
 
 helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHART_VERSION=0.1.0+sha-abc123)
 	@bash -c '\
@@ -242,8 +248,9 @@ helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHA
 			CHART_VERSION="$(VERSION)"; \
 		fi; \
 		echo "Fetching digest for chart version: $$CHART_VERSION"; \
+		echo "Note: Helm automatically appends chart name, so full path is: $(HELM_CHART_FULL_PATH)"; \
 		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin > /dev/null 2>&1; \
-		CHART_REF="$(HELM_CHART_REGISTRY):$$CHART_VERSION"; \
+		CHART_REF="$(HELM_CHART_FULL_PATH):$$CHART_VERSION"; \
 		if command -v crane > /dev/null; then \
 			DIGEST=$$(crane digest $$CHART_REF 2>/dev/null); \
 			if [ -n "$$DIGEST" ]; then \
