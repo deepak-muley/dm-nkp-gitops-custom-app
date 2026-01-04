@@ -60,7 +60,7 @@ helm show chart oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-
 helm show values oci://ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart --version 0.1.0+sha-abc1234
 ```
 
-**Note:** 
+**Note:**
 - Container images use `-` in tags (e.g., `0.1.0-sha-abc1234`)
 - Helm charts use `+` in versions (e.g., `0.1.0+sha-abc1234`)
 - Helm charts have `-chart` suffix in the package name
@@ -189,7 +189,7 @@ crane ls ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
 check_artifact_type() {
   local ref=$1
   local manifest=$(crane manifest "$ref" 2>/dev/null)
-  
+
   if echo "$manifest" | jq -e '.annotations."org.opencontainers.image.title"' > /dev/null 2>&1; then
     echo "Helm Chart"
   elif echo "$manifest" | jq -e '.config' > /dev/null 2>&1; then
