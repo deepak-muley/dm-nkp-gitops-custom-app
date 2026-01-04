@@ -1,4 +1,4 @@
-.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm setup-pre-commit pre-commit pre-commit-update
+.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest helm-show-values docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm setup-pre-commit pre-commit pre-commit-update
 
 # Variables
 APP_NAME := dm-nkp-gitops-custom-app
@@ -17,11 +17,17 @@ SIGN ?= false
 REGISTRY_ENV ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -qE '^(master|main)$$' && echo "prod" || echo "dev")
 # Base registry path (owner/repo)
 REGISTRY_BASE := ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
-# Full registry path with environment prefix: /dev/ or /prod/ for clear environment identification
-# Format: ghcr.io/owner/repo/{dev|prod}/image-name
-REGISTRY := $(REGISTRY_BASE)/$(REGISTRY_ENV)/$(APP_NAME)
+# Separate package names for clarity: images and charts use different package names
+# Container image package name (explicit - no suffix needed)
+IMAGE_PACKAGE := $(APP_NAME)
+# Helm chart package name (explicit -chart suffix to distinguish from images)
+HELM_CHART_PACKAGE := $(APP_NAME)-chart
+# Full registry paths with environment prefix and explicit package names
+# Format: ghcr.io/owner/repo/{dev|prod}/{package-name}
+IMAGE_REGISTRY := $(REGISTRY_BASE)/$(REGISTRY_ENV)/$(IMAGE_PACKAGE)
+HELM_CHART_REGISTRY := $(REGISTRY_BASE)/$(REGISTRY_ENV)/$(HELM_CHART_PACKAGE)
 HELM_CHART_NAME := $(APP_NAME)
-HELM_REPO := oci://$(REGISTRY)
+HELM_REPO := oci://$(HELM_CHART_REGISTRY)
 
 # Generate immutable version with Git SHA if IMMUTABLE=true, otherwise use base VERSION
 # Note: Docker image tags cannot contain '+', so we use '-' for images and '+' for Helm charts
@@ -36,7 +42,7 @@ else
   IMAGE_VERSION := $(VERSION)
   HELM_CHART_VERSION := $(VERSION)
 endif
-IMAGE := $(REGISTRY)/$(APP_NAME):$(IMAGE_VERSION)
+IMAGE := $(IMAGE_REGISTRY):$(IMAGE_VERSION)
 
 # Go parameters
 GOCMD := go
@@ -118,7 +124,7 @@ helm-chart: ## Package Helm chart (use IMMUTABLE=false to disable Git SHA in ver
 		exit 1; \
 	fi
 	@echo "Packaging Helm chart with version: $(HELM_CHART_VERSION)"
-	@echo "Registry: $(REGISTRY) (environment: $(REGISTRY_ENV))"
+	@echo "Helm Chart Registry: $(HELM_CHART_REGISTRY) (environment: $(REGISTRY_ENV))"
 	helm package chart/$(APP_NAME) --version $(HELM_CHART_VERSION) --app-version $(VERSION) -d chart/
 	@echo "Helm chart packaged: chart/$(APP_NAME)-$(HELM_CHART_VERSION).tgz"
 
@@ -139,7 +145,7 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
 			exit 1; \
 		fi; \
-		echo "Registry: $(REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		echo "Helm Chart Registry: $(HELM_CHART_REGISTRY) (environment: $(REGISTRY_ENV))"; \
 		echo "Logging in to GHCR..."; \
 		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin; \
 		echo "Pushing Helm chart $(HELM_CHART_VERSION) to $(HELM_REPO)..."; \
@@ -147,7 +153,7 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 		echo "✓ Helm chart pushed to $(HELM_REPO)"; \
 		echo ""; \
 		echo "Chart reference:"; \
-		echo "  Tag: $(HELM_REPO)/$(HELM_CHART_NAME):$(HELM_CHART_VERSION)"; \
+		echo "  $(HELM_REPO):$(HELM_CHART_VERSION)"; \
 		if [ "$(IMMUTABLE)" = "true" ]; then \
 			echo "  Git SHA: $(GIT_SHA_FULL)"; \
 			echo ""; \
@@ -156,7 +162,7 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 		fi; \
 		if [ "$(PUBLIC)" = "true" ] || [ "$(PUBLIC)" = "1" ]; then \
 			echo "Making Helm chart public..."; \
-			PACKAGE_NAME="$(HELM_CHART_NAME)"; \
+			PACKAGE_NAME="$(HELM_CHART_PACKAGE)"; \
 			if command -v gh > /dev/null; then \
 				echo "Using GitHub CLI to make chart public..."; \
 				export GITHUB_TOKEN; \
@@ -190,6 +196,35 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 			fi; \
 		fi'
 
+helm-show-values: ## Show Helm chart values (use CHART_VERSION=0.1.0+sha-abc123 or auto-detects from current commit)
+	@bash -c '\
+		if [ -f .env.local ]; then \
+			. .env.local; \
+		fi; \
+		if [ -z "$$GITHUB_TOKEN" ]; then \
+			echo "GITHUB_TOKEN environment variable is not set"; \
+			echo "Create a GitHub Personal Access Token (PAT) with '\''read:packages'\'' permission"; \
+			echo "Then either:"; \
+			echo "  1. Create .env.local file with: export GITHUB_TOKEN=your_token_here"; \
+			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
+			exit 1; \
+		fi; \
+		if [ -n "$(CHART_VERSION)" ]; then \
+			CHART_VERSION="$(CHART_VERSION)"; \
+		elif [ "$(IMMUTABLE)" = "true" ]; then \
+			CHART_VERSION="$(HELM_CHART_VERSION)"; \
+		else \
+			CHART_VERSION="$(VERSION)"; \
+		fi; \
+		echo "Showing values for Helm chart version: $$CHART_VERSION"; \
+		echo "Chart registry: $(HELM_CHART_REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		echo ""; \
+		echo "Command:"; \
+		echo "  helm show values $(HELM_REPO) --version $$CHART_VERSION"; \
+		echo ""; \
+		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin > /dev/null 2>&1; \
+		helm show values $(HELM_REPO) --version $$CHART_VERSION'
+
 helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHART_VERSION=0.1.0+sha-abc123)
 	@bash -c '\
 		if [ -f .env.local ]; then \
@@ -208,7 +243,7 @@ helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHA
 		fi; \
 		echo "Fetching digest for chart version: $$CHART_VERSION"; \
 		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin > /dev/null 2>&1; \
-		CHART_REF="$(HELM_REPO)/$(HELM_CHART_NAME):$$CHART_VERSION"; \
+		CHART_REF="$(HELM_CHART_REGISTRY):$$CHART_VERSION"; \
 		if command -v crane > /dev/null; then \
 			DIGEST=$$(crane digest $$CHART_REF 2>/dev/null); \
 			if [ -n "$$DIGEST" ]; then \
@@ -217,12 +252,12 @@ helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHA
 				echo "  $$DIGEST"; \
 				echo ""; \
 				echo "Immutable reference:"; \
-				echo "  $(HELM_REPO)/$(HELM_CHART_NAME)@$$DIGEST"; \
+				echo "  $(HELM_REPO)@$$DIGEST"; \
 				echo ""; \
 				echo "Use this reference in your deployments for immutability:"; \
-				echo "  helm install my-app $(HELM_REPO)/$(HELM_CHART_NAME) --version $$CHART_VERSION --oci-registry-config ~/.docker/config.json"; \
+				echo "  helm install my-app $(HELM_REPO) --version $$CHART_VERSION --oci-registry-config ~/.docker/config.json"; \
 				echo "  # Or with digest:"; \
-				echo "  helm install my-app $(HELM_REPO)/$(HELM_CHART_NAME)@$$DIGEST --oci-registry-config ~/.docker/config.json"; \
+				echo "  helm install my-app $(HELM_REPO)@$$DIGEST --oci-registry-config ~/.docker/config.json"; \
 			else \
 				echo "Error: Could not retrieve digest. Chart may not exist or version may be incorrect."; \
 				exit 1; \
@@ -237,7 +272,7 @@ helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHA
 					echo "  $$DIGEST"; \
 					echo ""; \
 					echo "Immutable reference:"; \
-					echo "  $(HELM_REPO)/$(HELM_CHART_NAME)@$$DIGEST"; \
+					echo "  $(HELM_REPO)@$$DIGEST"; \
 				else \
 					echo "Error: Could not extract digest from manifest."; \
 					exit 1; \
@@ -253,7 +288,7 @@ helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHA
 			echo "  - skopeo: https://github.com/containers/skopeo"; \
 			echo ""; \
 			echo "Alternatively, use helm show to get chart information:"; \
-			echo "  helm show chart $(HELM_REPO)/$(HELM_CHART_NAME) --version $$CHART_VERSION"; \
+			echo "  helm show chart $(HELM_REPO) --version $$CHART_VERSION"; \
 			exit 1; \
 		fi'
 
@@ -360,7 +395,7 @@ docker-build: ## Build Docker image using buildpacks (use IMMUTABLE=false to dis
 		exit 1; \
 	fi
 	@echo "Building Docker image with version: $(IMAGE_VERSION)"
-	@echo "Registry: $(REGISTRY) (environment: $(REGISTRY_ENV))"
+	@echo "Container Image Registry: $(IMAGE_REGISTRY) (environment: $(REGISTRY_ENV))"
 	pack build $(IMAGE) \
 		--builder gcr.io/buildpacks/builder:google-22 \
 		--env GOOGLE_RUNTIME_VERSION=$(GO_VERSION) \
@@ -369,7 +404,7 @@ docker-build: ## Build Docker image using buildpacks (use IMMUTABLE=false to dis
 		--env METRICS_PORT=9090
 	@echo "✓ Docker image built: $(IMAGE)"
 
-docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign with cosign, REGISTRY_PATH=dev for dev path)
+docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign with cosign, REGISTRY_ENV=dev for dev path)
 	@bash -c '\
 		if [ -f .env.local ]; then \
 			. .env.local; \
@@ -382,7 +417,7 @@ docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign 
 			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
 			exit 1; \
 		fi; \
-		echo "Registry: $(REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		echo "Container Image Registry: $(IMAGE_REGISTRY) (environment: $(REGISTRY_ENV))"; \
 		echo "Logging in to GHCR..."; \
 		docker login ghcr.io -u $(shell git config user.name) -p $$GITHUB_TOKEN; \
 		echo "Pushing Docker image $(IMAGE)..."; \

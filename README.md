@@ -39,6 +39,7 @@ This is a demo application that demonstrates:
 - **[Model Repository Template](docs/model-repository-template.md)** - Complete guide to replicating this repository setup
 - **[CI/CD Pipeline](docs/cicd-pipeline.md)** - Complete CI/CD documentation
 - **[GitHub Actions Reference](docs/github-actions-reference.md)** - All workflows documented
+- **[Commit Signing Guide](docs/commit-signing.md)** - How to set up GPG commit signing for verified commits
 - **[OpenSSF Scorecard](docs/openssf-scorecard.md)** - Security posture assessment
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[Architecture Decision Records](docs/adr/)** - Technical decision documentation
@@ -427,6 +428,7 @@ For more detailed documentation, see:
 - [Metrics Documentation](docs/metrics.md)
 - [Testing Guide](docs/testing.md)
 - [Security Guide](docs/security.md)
+- [Commit Signing Guide](docs/commit-signing.md) - Set up GPG commit signing for verified commits
 - [Verification Guide](docs/verification.md) - Step-by-step verification instructions
 - [Buildpacks Guide](docs/buildpacks.md) - How buildpacks work and usage
 - [Grafana Dashboard Guide](docs/grafana.md) - How to use the Grafana dashboard
