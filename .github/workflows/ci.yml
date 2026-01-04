@@ -90,6 +90,7 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -239,6 +240,7 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract version for PR
         id: version
@@ -283,7 +285,7 @@ jobs:
 
       - name: Install kubesec
         run: |
-          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.11.0/kubesec_linux_amd64.tar.gz | tar -xz
+          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.2/kubesec_linux_amd64.tar.gz | tar -xz
           sudo mv kubesec /usr/local/bin/
           kubesec version
 
@@ -291,6 +293,7 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run kubesec on base manifests
         run: make kubesec
