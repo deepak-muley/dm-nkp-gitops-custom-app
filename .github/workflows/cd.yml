@@ -80,8 +80,6 @@ jobs:
 
       - name: Sign Docker image
         if: github.event_name != 'pull_request'
-        env:
-          COSIGN_EXPERIMENTAL: 1
         run: |
           echo "Signing Docker image with cosign (keyless)..."
           cosign sign --yes ${{ steps.version.outputs.IMAGE }}
