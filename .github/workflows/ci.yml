@@ -282,7 +282,7 @@ jobs:
 
       - name: Install kubesec
         run: |
-          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.11.0/kubesec_linux_amd64.tar.gz | tar -xz
+          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.2/kubesec_linux_amd64.tar.gz | tar -xz
           sudo mv kubesec /usr/local/bin/
           kubesec version
 
