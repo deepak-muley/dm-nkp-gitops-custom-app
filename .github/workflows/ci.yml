@@ -204,7 +204,7 @@ jobs:
           GIT_SHA_SHORT="${GIT_SHA:0:7}"
           BASE_VERSION="0.1.0"
           IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
-          IMAGE="${{ env.DEV_REGISTRY }}:${IMAGE_VERSION}"
+          IMAGE="${{ env.DEV_IMAGE_REGISTRY }}:${IMAGE_VERSION}"
           echo "IMAGE_VERSION=$IMAGE_VERSION" >> $GITHUB_OUTPUT
           echo "IMAGE=$IMAGE" >> $GITHUB_OUTPUT
           echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
