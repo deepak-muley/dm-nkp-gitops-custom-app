@@ -9,8 +9,12 @@ on:
 
 env:
   APP_NAME: dm-nkp-gitops-custom-app
-  # Production registry path (master branch)
-  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app
+  REGISTRY_BASE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+  # Separate package names for clarity: images and charts use different names
+  # Container images: /prod/{app-name}
+  PROD_IMAGE_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app
+  # Helm charts: /prod/{app-name}-chart (explicit -chart suffix)
+  PROD_CHART_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/prod/dm-nkp-gitops-custom-app-chart
 
 jobs:
   build-and-push:
@@ -54,7 +58,7 @@ jobs:
           echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
           echo "GIT_SHA=$GIT_SHA" >> $GITHUB_OUTPUT
           echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
-          echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE=${{ env.PROD_IMAGE_REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install pack CLI
         uses: buildpacks/github-actions/setup-pack@v5.10.0
@@ -93,9 +97,9 @@ jobs:
         run: |
           helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.CHART_VERSION }} --app-version ${{ steps.version.outputs.BASE_VERSION }} -d chart/
           echo "${{ secrets.GITHUB_PAT || secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.REGISTRY }}
+          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.PROD_CHART_REGISTRY }}
           echo "✓ Helm chart pushed with immutable version: ${{ steps.version.outputs.CHART_VERSION }}"
-          echo "Chart reference: oci://${{ env.REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
+          echo "Chart reference: oci://${{ env.PROD_CHART_REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
           echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
           echo ""
           echo "Note: Image uses '-' (e.g., ${{ steps.version.outputs.IMAGE_VERSION }}), Chart uses '+' (e.g., ${{ steps.version.outputs.CHART_VERSION }})"
@@ -159,10 +163,10 @@ jobs:
           GIT_SHA_SHORT="${GIT_SHA:0:7}"
           IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
           CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
-          echo "IMAGE=${{ env.REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE=${{ env.PROD_IMAGE_REGISTRY }}:$IMAGE_VERSION" >> $GITHUB_OUTPUT
           echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
-          echo "Using production image: ${{ env.REGISTRY }}:$IMAGE_VERSION"
-          echo "Using chart version: $CHART_VERSION"
+          echo "Using production image: ${{ env.PROD_IMAGE_REGISTRY }}:$IMAGE_VERSION"
+          echo "Using chart: oci://${{ env.PROD_CHART_REGISTRY }}:$CHART_VERSION"
 
       - name: Pull Docker image from GHCR
         run: |
@@ -173,7 +177,7 @@ jobs:
       - name: Pull Helm chart from GHCR
         run: |
           echo "${{ secrets.GITHUB_PAT || secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm pull oci://${{ env.REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/
+          helm pull oci://${{ env.PROD_CHART_REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/
           echo "✓ Helm chart pulled for e2e tests"
 
       - name: Run e2e tests with production artifacts

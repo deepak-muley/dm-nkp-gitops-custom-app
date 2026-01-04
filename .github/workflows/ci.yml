@@ -10,10 +10,12 @@ on:
 env:
   APP_NAME: dm-nkp-gitops-custom-app
   VERSION: 0.1.0
-  REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
-  IMAGE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app:0.1.0
-  # Use /dev path for PR branches, main path for master
-  DEV_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dm-nkp-gitops-custom-app/dev
+  REGISTRY_BASE: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app
+  # Separate package names for clarity: images and charts use different names
+  # Container images: /dev/{app-name}
+  DEV_IMAGE_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app
+  # Helm charts: /dev/{app-name}-chart (explicit -chart suffix)
+  DEV_CHART_REGISTRY: ghcr.io/deepak-muley/dm-nkp-gitops-custom-app/dev/dm-nkp-gitops-custom-app-chart
 
 jobs:
   test:
@@ -127,7 +129,7 @@ jobs:
           BASE_VERSION="0.1.0"
           IMAGE_VERSION="${BASE_VERSION}-sha-${GIT_SHA_SHORT}"
           CHART_VERSION="${BASE_VERSION}+sha-${GIT_SHA_SHORT}"
-          DEV_IMAGE="${{ env.DEV_REGISTRY }}:${IMAGE_VERSION}"
+          DEV_IMAGE="${{ env.DEV_IMAGE_REGISTRY }}:${IMAGE_VERSION}"
           echo "IMAGE=$DEV_IMAGE" >> $GITHUB_OUTPUT
           echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_OUTPUT
           echo "IMAGE_TAG=dm-nkp-gitops-custom-app:test" >> $GITHUB_OUTPUT
@@ -142,7 +144,7 @@ jobs:
       - name: Pull Helm chart from dev path
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm pull oci://${{ env.DEV_REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/ || echo "Chart not found, will use local"
+          helm pull oci://${{ env.DEV_CHART_REGISTRY }} --version ${{ steps.version.outputs.CHART_VERSION }} -d chart/ || echo "Chart not found, will use local"
           echo "✓ Helm chart pulled from dev path (if available)"
 
       - name: Run e2e tests with built artifacts
@@ -263,8 +265,8 @@ jobs:
         run: |
           helm package chart/${{ env.APP_NAME }} --version ${{ steps.version.outputs.CHART_VERSION }} --app-version 0.1.0 -d chart/
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.DEV_REGISTRY }}
-          echo "✓ Helm chart pushed to dev path: oci://${{ env.DEV_REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
+          helm push chart/${{ env.APP_NAME }}-${{ steps.version.outputs.CHART_VERSION }}.tgz oci://${{ env.DEV_CHART_REGISTRY }}
+          echo "✓ Helm chart pushed to dev path: oci://${{ env.DEV_CHART_REGISTRY }}:${{ steps.version.outputs.CHART_VERSION }}"
           echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
 
       - name: Upload Helm chart artifact
