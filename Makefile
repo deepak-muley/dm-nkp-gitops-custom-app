@@ -1,4 +1,4 @@
-.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm setup-pre-commit pre-commit pre-commit-update
+.PHONY: help build test unit-tests integration-tests e2e-tests clean lint fmt vet deps helm-chart push-helm-chart helm-chart-digest helm-show-values docker-build docker-push docker-sign docker-verify check-artifact check-secrets setup-branch-protection check-branch-protection check-branch-protection-repo kubesec kubesec-helm setup-pre-commit pre-commit pre-commit-update
 
 # Variables
 APP_NAME := dm-nkp-gitops-custom-app
@@ -195,6 +195,35 @@ push-helm-chart: helm-chart ## Push Helm chart to OCI registry (use PUBLIC=true 
 				echo "  https://github.com/users/$(shell git config user.name)/packages/container/package/$$PACKAGE_NAME"; \
 			fi; \
 		fi'
+
+helm-show-values: ## Show Helm chart values (use CHART_VERSION=0.1.0+sha-abc123 or auto-detects from current commit)
+	@bash -c '\
+		if [ -f .env.local ]; then \
+			. .env.local; \
+		fi; \
+		if [ -z "$$GITHUB_TOKEN" ]; then \
+			echo "GITHUB_TOKEN environment variable is not set"; \
+			echo "Create a GitHub Personal Access Token (PAT) with '\''read:packages'\'' permission"; \
+			echo "Then either:"; \
+			echo "  1. Create .env.local file with: export GITHUB_TOKEN=your_token_here"; \
+			echo "  2. Or run: export GITHUB_TOKEN=your_token_here"; \
+			exit 1; \
+		fi; \
+		if [ -n "$(CHART_VERSION)" ]; then \
+			CHART_VERSION="$(CHART_VERSION)"; \
+		elif [ "$(IMMUTABLE)" = "true" ]; then \
+			CHART_VERSION="$(HELM_CHART_VERSION)"; \
+		else \
+			CHART_VERSION="$(VERSION)"; \
+		fi; \
+		echo "Showing values for Helm chart version: $$CHART_VERSION"; \
+		echo "Chart registry: $(HELM_CHART_REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		echo ""; \
+		echo "Command:"; \
+		echo "  helm show values $(HELM_REPO) --version $$CHART_VERSION"; \
+		echo ""; \
+		echo $$GITHUB_TOKEN | helm registry login ghcr.io -u $(shell git config user.name) --password-stdin > /dev/null 2>&1; \
+		helm show values $(HELM_REPO) --version $$CHART_VERSION'
 
 helm-chart-digest: ## Get the immutable digest for a Helm chart version (use CHART_VERSION=0.1.0+sha-abc123)
 	@bash -c '\
