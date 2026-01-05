@@ -178,7 +178,7 @@ jobs:
         run: make build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: binary
           path: bin/
@@ -280,7 +280,7 @@ jobs:
           echo "Git SHA: ${{ steps.version.outputs.GIT_SHA }}"
 
       - name: Upload Helm chart artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: helm-chart
           path: chart/*.tgz
