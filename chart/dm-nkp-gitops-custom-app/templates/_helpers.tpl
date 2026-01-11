@@ -58,3 +58,39 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Get namespace - handles empty strings properly
+*/}}
+{{- define "dm-nkp-gitops-custom-app.namespace" -}}
+{{- if and .Values.namespace.name (ne .Values.namespace.name "") }}
+{{- .Values.namespace.name }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get Grafana namespace - handles empty strings and missing values properly
+Checks dashboards namespace first, then datasources namespace, then defaults to Release.Namespace
+*/}}
+{{- define "dm-nkp-gitops-custom-app.grafanaNamespace" -}}
+{{- if and .Values.grafana.dashboards.namespace (ne .Values.grafana.dashboards.namespace "") }}
+{{- .Values.grafana.dashboards.namespace }}
+{{- else if and .Values.grafana.datasources.namespace (ne .Values.grafana.datasources.namespace "") }}
+{{- .Values.grafana.datasources.namespace }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get monitoring namespace - handles empty strings and missing values properly
+*/}}
+{{- define "dm-nkp-gitops-custom-app.monitoringNamespace" -}}
+{{- if and .Values.monitoring.serviceMonitor.namespace (ne .Values.monitoring.serviceMonitor.namespace "") }}
+{{- .Values.monitoring.serviceMonitor.namespace }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end }}

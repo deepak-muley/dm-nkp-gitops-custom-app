@@ -1,0 +1,78 @@
+{{- if .Values.otel-collector.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-otel-collector
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+    component: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "observability-stack.selectorLabels" . | nindent 6 }}
+      component: otel-collector
+  template:
+    metadata:
+      labels:
+        {{- include "observability-stack.selectorLabels" . | nindent 8 }}
+        component: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.otel-collector.image.repository }}:{{ .Values.otel-collector.image.tag }}
+          imagePullPolicy: {{ .Values.otel-collector.image.pullPolicy }}
+          command:
+            - /otelcol-contrib
+            - --config=/etc/otel-collector-config/config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: prometheus
+              containerPort: 8889
+              protocol: TCP
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otel-collector-config
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: otel-collector-config
+          configMap:
+            name: {{ include "observability-stack.fullname" . }}-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-otel-collector
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+    component: otel-collector
+spec:
+  type: {{ .Values.otel-collector.service.type }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.otel-collector.service.ports.otlp-grpc }}
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.otel-collector.service.ports.otlp-http }}
+      targetPort: otlp-http
+      protocol: TCP
+    - name: prometheus
+      port: {{ .Values.otel-collector.service.ports.prometheus }}
+      targetPort: prometheus
+      protocol: TCP
+  selector:
+    {{- include "observability-stack.selectorLabels" . | nindent 4 }}
+    component: otel-collector
+{{- end }}

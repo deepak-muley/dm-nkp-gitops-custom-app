@@ -1,3 +1,8 @@
+# ServiceMonitor is deprecated when using OpenTelemetry
+# With OpenTelemetry, metrics are exported via OTLP to OTel Collector
+# which then forwards them to Prometheus in Prometheus format
+# This ServiceMonitor is kept for backward compatibility only
+# To use it, you would need to expose a /metrics endpoint (not recommended with OTel)
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -5,12 +10,13 @@ metadata:
   namespace: default
   labels:
     app: dm-nkp-gitops-custom-app
+  annotations:
+    # Disabled by default - metrics are collected via OpenTelemetry Collector
+    prometheus.io/scrape: "false"
 spec:
   selector:
     matchLabels:
       app: dm-nkp-gitops-custom-app
-  endpoints:
-    - port: metrics
-      interval: 30s
-      scrapeTimeout: 10s
-      path: /metrics
+  # Note: With OpenTelemetry, this ServiceMonitor is not needed
+  # Metrics are exported via OTLP to OTel Collector, which exposes them for Prometheus scraping
+  endpoints: []

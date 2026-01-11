@@ -8,24 +8,115 @@
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
 [![Kubernetes](https://img.shields.io/badge/kubernetes-1.28+-blue.svg)](https://kubernetes.io/)
 
-A production-ready Golang application with Prometheus metrics integration, designed for deployment in Nutanix NKP (Nutanix Kubernetes Platform) infrastructure. This repository serves as a **reference implementation** for building cloud-native applications with comprehensive CI/CD, security scanning, and best practices.
+A production-ready Golang application with OpenTelemetry telemetry (metrics, logs, traces), designed for deployment in Nutanix NKP (Nutanix Kubernetes Platform) infrastructure. This repository serves as a **reference implementation** for building cloud-native applications with comprehensive CI/CD, security scanning, and best practices.
 
 ## Overview
 
 This is a demo application that demonstrates:
 
-- Prometheus metrics export (Counter, Gauge, Histogram, Summary)
+- OpenTelemetry telemetry export (metrics, logs, traces)
 - Health and readiness endpoints
 - Kubernetes deployment with Helm
 - Integration with Traefik and Gateway API
 - CI/CD with GitHub Actions
 - Distroless container builds using buildpacks
 
+## Core Application & Telemetry
+
+### What the App Does
+
+This is a simple HTTP server written in Go that serves three endpoints:
+
+- **`/`** - Main endpoint that returns a JSON greeting message
+- **`/health`** - Liveness probe endpoint for Kubernetes
+- **`/ready`** - Readiness probe endpoint for Kubernetes
+
+The server listens on port `8080` (configurable via `PORT` env var) and handles HTTP requests with timeouts and graceful shutdown support.
+
+### How Telemetry is Generated
+
+All telemetry is exported via **OpenTelemetry** to an OpenTelemetry Collector using the OTLP protocol (gRPC on port 4317). The collector then forwards data to:
+- **Metrics** → Prometheus
+- **Logs** → Loki  
+- **Traces** → Tempo
+
+#### Metrics
+
+Metrics are **manually recorded** in the HTTP handlers using the `internal/metrics` package:
+
+```go
+// Example from server handlers:
+metrics.IncrementRequestCounter()                          // Counter
+metrics.IncrementRequestCounterVec(r.Method, "200")       // Counter with labels
+metrics.UpdateActiveConnections(1)                        // Gauge
+metrics.UpdateRequestDuration(duration)                   // Histogram
+metrics.UpdateResponseSize(float64(len(responseBody)))    // Histogram
+```
+
+Available metrics:
+- `http_requests_total` - Total HTTP request counter
+- `http_requests_by_method_total` - Requests by method and status code
+- `http_active_connections` - Current active connections gauge
+- `http_request_duration_seconds` - Request duration histogram
+- `http_response_size_bytes` - Response size histogram
+- `business_metric_value` - Custom business metrics gauge
+
+#### Logs
+
+Logs are generated using **structured logging** via `internal/telemetry` package:
+
+```go
+// Example from server handlers:
+telemetry.LogInfo(ctx, "Received request: method=GET path=/ remote_addr=127.0.0.1")
+telemetry.LogError(ctx, "Failed to process request", err)
+```
+
+Logs are written to **stdout/stderr** and automatically collected by the OpenTelemetry Collector (configured to scrape container logs), which forwards them to Loki.
+
+#### Traces
+
+Traces are generated through **two mechanisms**:
+
+1. **Automatic HTTP instrumentation** - The entire HTTP server is wrapped with OpenTelemetry HTTP middleware (`otelhttp.NewHandler`), which automatically creates spans for every HTTP request with:
+   - HTTP method, URL, status code
+   - Request/response sizes
+   - Duration
+   - Client IP and user agent
+
+2. **Manual spans** - Additional spans are created in handlers for business logic:
+
+```go
+// Example from server handlers:
+ctx, processSpan := tracer.Start(ctx, "process.request")
+defer processSpan.End()
+
+ctx, businessSpan := tracer.Start(ctx, "business.logic")
+businessSpan.SetAttributes(attribute.String("business.operation", "generate_response"))
+defer businessSpan.End()
+```
+
+All traces are automatically exported to the OpenTelemetry Collector via OTLP, which forwards them to Tempo.
+
+### Quick Reference
+
+**Generate Metrics/Logs/Traces:**
+- Make HTTP requests to the server → Automatically generates all three types of telemetry
+- Metrics: Manually recorded in handlers via `metrics.*` functions
+- Logs: Written via `telemetry.LogInfo/LogError` functions (stdout/stderr)
+- Traces: Auto-generated via `otelhttp` middleware + manual spans in handlers
+
+**View Telemetry:**
+- Metrics: Prometheus → Grafana
+- Logs: Loki → Grafana  
+- Traces: Tempo → Grafana
+
+See [OpenTelemetry Quick Start](docs/OPENTELEMETRY_QUICK_START.md) for setup instructions.
+
 ## Features
 
-- **Prometheus Metrics**: Exports standard Prometheus metrics on `/metrics` endpoint
+- **OpenTelemetry Telemetry**: Unified metrics, logs, and traces via OTLP to OpenTelemetry Collector
 - **Health Checks**: `/health` and `/ready` endpoints for Kubernetes probes
-- **Multiple Metric Types**: Counter, Gauge, Histogram, Summary, and CounterVec examples
+- **Multiple Metric Types**: Counter, Gauge, Histogram, and CounterVec examples
 - **Helm Chart**: Production-ready Helm chart for Kubernetes deployment
 - **Security Hardened**: Implements kubesec best practices with Seccomp, non-root user, read-only filesystem, and dropped capabilities (AppArmor disabled for kind compatibility)
 - **Traefik Integration**: IngressRoute manifests for Traefik
@@ -103,7 +194,7 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 # Open http://localhost:3000 (admin/admin)
 ```
 
-See [E2E_DEMO.md](E2E_DEMO.md) for detailed step-by-step instructions.
+See [docs/E2E_DEMO.md](docs/E2E_DEMO.md) for detailed step-by-step instructions.
 
 ### Grafana Dashboard - End-to-End Verification
 
@@ -207,9 +298,10 @@ For more details on using and customizing the dashboard, see the [Grafana Dashbo
 
 5. **Access the application**:
    - Main endpoint: <http://localhost:8080>
-   - Metrics endpoint: <http://localhost:9090/metrics>
    - Health check: <http://localhost:8080/health>
    - Readiness check: <http://localhost:8080/ready>
+   
+   **Note**: Metrics are exported via OpenTelemetry to the OTel Collector (not exposed on a separate metrics port). See [Core Application & Telemetry](#core-application--telemetry) section above for details.
 
 ### Running Tests
 
@@ -248,18 +340,20 @@ The Makefile provides the following targets:
 - `docker-push` - Build and push Docker image
 - `all` - Run clean, deps, lint, build, test
 
-## Prometheus Metrics
+## OpenTelemetry Metrics
 
-The application exports the following Prometheus metrics:
+The application exports the following OpenTelemetry metrics (forwarded to Prometheus by the OTel Collector):
 
 - `http_requests_total` (Counter) - Total number of HTTP requests
 - `http_active_connections` (Gauge) - Current number of active connections
 - `http_request_duration_seconds` (Histogram) - Request duration distribution
-- `http_response_size_bytes` (Summary) - Response size distribution
+- `http_response_size_bytes` (Histogram) - Response size distribution
 - `http_requests_by_method_total` (CounterVec) - Requests by method and status
 - `business_metric_value` (GaugeVec) - Custom business metrics
 
-Access metrics at: `http://localhost:9090/metrics`
+All metrics are exported via OTLP to the OpenTelemetry Collector (`otel-collector:4317`), which converts them to Prometheus format. When the collector's Prometheus exporter endpoint is scraped (port 8889), these metrics become available in Prometheus.
+
+For more details, see [Core Application & Telemetry](#core-application--telemetry) section above.
 
 ## Deployment
 
@@ -412,27 +506,37 @@ The project includes GitHub Actions workflows:
 
 This application is designed to integrate with Nutanix NKP infrastructure components:
 
-- **Prometheus**: Metrics are scraped via ServiceMonitor
-- **Grafana**: Dashboards can visualize the exported metrics
-- **Loki**: Application logs can be collected (when logging is added)
+- **OpenTelemetry Collector**: Receives all telemetry (metrics, logs, traces) via OTLP
+- **Prometheus**: Metrics forwarded from OTel Collector (scraped via ServiceMonitor)
+- **Grafana**: Dashboards visualize metrics, logs, and traces from all backends
+- **Loki**: Application logs forwarded from OTel Collector
+- **Tempo**: Distributed traces forwarded from OTel Collector
 - **Traefik**: Ingress routing via IngressRoute
 - **Gateway API**: Modern ingress via HTTPRoute
 - **Dex**: Authentication/authorization (when integrated)
 
 ## Documentation
 
-For more detailed documentation, see:
+**📚 [Start Here: Documentation Guide](docs/README.md)** - Complete learning path organized by topics
 
-- [Development Guide](docs/development.md)
-- [Deployment Guide](docs/deployment.md)
-- [Metrics Documentation](docs/metrics.md)
-- [Testing Guide](docs/testing.md)
-- [Security Guide](docs/security.md)
-- [Commit Signing Guide](docs/commit-signing.md) - Set up GPG commit signing for verified commits
-- [Verification Guide](docs/verification.md) - Step-by-step verification instructions
-- [Buildpacks Guide](docs/buildpacks.md) - How buildpacks work and usage
-- [Grafana Dashboard Guide](docs/grafana.md) - How to use the Grafana dashboard
-- [Manifests vs Helm Charts](docs/manifests-vs-helm.md) - Understanding the difference between manifests/ and chart/templates/
+### Quick Links
+
+- **[Quick Start](docs/QUICK_START.md)** - Get up and running in 5 minutes
+- **[Grafana Beginner Guide](docs/GRAFANA_BEGINNER_GUIDE.md)** - Understand dashboards and monitoring (⭐ Recommended)
+- **[OpenTelemetry Quick Start](docs/OPENTELEMETRY_QUICK_START.md)** - Deploy observability stack
+- **[Development Guide](docs/development.md)** - Local development setup
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Production deployment
+- **[E2E Quick Reference](docs/E2E_QUICK_REFERENCE.md)** - Run end-to-end tests
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+### Full Documentation Index
+
+See **[Documentation Guide](docs/README.md)** for:
+- 📖 Organized learning paths
+- 🎯 Topic-based categories
+- 🚀 Recommended reading order for beginners
+- ⚠️ Deprecated/consolidated documents list
+- 🎓 Step-by-step bootstrap guide
 
 ## Contributing
 

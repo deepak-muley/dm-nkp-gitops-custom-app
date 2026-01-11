@@ -1,0 +1,68 @@
+{{- if .Values.otel-collector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-otel-collector-config
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+    
+    exporters:
+      # Export metrics to Prometheus format (Prometheus can scrape this endpoint)
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      {{- if .Values.otel-collector.logs.enabled }}
+      # Export logs to Loki
+      # ⚠️  NOTE: Only enable if Logging Operator is NOT collecting logs
+      # If Logging Operator (Fluent Bit/D) is deployed by platform team,
+      # disable this to avoid duplicate log collection and storage
+      loki:
+        endpoint: {{ if .Values.otel-collector.logs.lokiEndpoint }}{{ .Values.otel-collector.logs.lokiEndpoint }}{{ else }}http://{{ include "observability-stack.fullname" . }}-loki:3100/loki/api/v1/push{{ end }}
+        labels:
+          resource:
+            service.name: "service_name"
+            service.namespace: "service_namespace"
+      {{- end }}
+      # Export traces to Tempo
+      # For local testing, reference Tempo service in same namespace
+      # In production, platform team pre-deploys Tempo
+      otlp/tempo:
+        endpoint: {{ include "observability-stack.fullname" . }}-tempo:4317
+        tls:
+          insecure: true
+      # Alternative: If Tempo is deployed separately via Helm chart
+      # endpoint: tempo:4317
+    
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus]
+        {{- if .Values.otel-collector.logs.enabled }}
+        # Log pipeline: Only enabled if Logging Operator is NOT handling logs
+        # If platform team deploys Logging Operator, this should be disabled
+        # to prevent duplicate log collection from stdout/stderr
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [loki]
+        {{- end }}
+{{- end }}

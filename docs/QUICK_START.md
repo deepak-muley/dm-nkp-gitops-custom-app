@@ -107,4 +107,4 @@ pack build test --clear-cache
 
 ## Next Steps
 
-See [docs/verification.md](docs/verification.md) for detailed verification steps.
+See [docs/verification.md](verification.md) for detailed verification steps.

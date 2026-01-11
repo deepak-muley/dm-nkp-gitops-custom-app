@@ -39,8 +39,6 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-            - name: metrics
-              containerPort: 9090
           securityContext:
             # Seccomp Profile (container-level)
             seccompProfile:
@@ -65,8 +63,15 @@ spec:
           env:
             - name: PORT
               value: "8080"
-            - name: METRICS_PORT
-              value: "9090"
+            # OpenTelemetry Configuration
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "otel-collector.observability.svc.cluster.local:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "dm-nkp-gitops-custom-app"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=dm-nkp-gitops-custom-app,service.version=0.1.0"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
           livenessProbe:
             httpGet:
               path: /health

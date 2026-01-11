@@ -1,0 +1,30 @@
+{{- if and .Values.otel-collector.enabled .Values.prometheus.scrapeOTelCollector.enabled }}
+---
+# Prometheus Scrape Config for OTel Collector
+# This configures Prometheus to scrape metrics from OTel Collector's Prometheus endpoint
+# For local testing only - in production, use ServiceMonitor from application chart
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-prometheus-scrape-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+data:
+  otel-collector-scrape.yaml: |
+    - job_name: 'otel-collector'
+      kubernetes_sd_configs:
+        - role: service
+          namespaces:
+            names:
+              - {{ .Release.Namespace }}
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          regex: '{{ include "observability-stack.fullname" . }}-otel-collector'
+          action: keep
+        - source_labels: [__meta_kubernetes_service_port_name]
+          regex: 'prometheus'
+          action: keep
+      scrape_interval: {{ .Values.prometheus.scrapeOTelCollector.interval | default "30s" }}
+      metrics_path: {{ .Values.prometheus.scrapeOTelCollector.path | default "/metrics" }}
+{{- end }}

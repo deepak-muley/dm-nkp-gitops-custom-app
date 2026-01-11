@@ -1,0 +1,27 @@
+{{- if .Values.grafana.dashboards.enabled }}
+# Grafana Dashboard Provider Configuration
+# This ConfigMap configures Grafana to discover dashboards from ConfigMaps with label grafana_dashboard=1
+# Note: For kube-prometheus-stack, Grafana may already have dashboard discovery configured.
+# This ConfigMap provides an app-specific provider if needed.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-provider
+  namespace: {{ include "dm-nkp-gitops-custom-app.grafanaNamespace" . }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: '{{ include "dm-nkp-gitops-custom-app.name" . }} Dashboards'
+      orgId: 1
+      folder: '{{ .Values.grafana.dashboards.folder | default "/" }}'
+      type: file
+      disableDeletion: false
+      editable: true
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/{{ include "dm-nkp-gitops-custom-app.name" . }}
+{{- end }}

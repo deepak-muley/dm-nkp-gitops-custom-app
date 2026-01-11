@@ -1,0 +1,65 @@
+# Default values for observability-stack
+# ⚠️  WARNING: LOCAL TESTING ONLY
+# This chart is for local development and testing purposes only.
+# In production K8s clusters, these services are pre-deployed by the platform team.
+# The application chart (dm-nkp-gitops-custom-app) deploys only app-specific CRs
+# that reference the pre-deployed platform services.
+
+otel-collector:
+  enabled: true
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    ports:
+      otlp-grpc: 4317
+      otlp-http: 4318
+      prometheus: 8889
+  # Log collection configuration
+  # Set logs.enabled to false if Logging Operator (Fluent Bit/D) is collecting logs
+  # This prevents duplicate log collection and storage
+  # In production with Logging Operator: set to false
+  # In local testing without Logging Operator: set to true
+  logs:
+    enabled: true  # Set to false if platform team deploys Logging Operator
+    # Loki endpoint for logs (only used if logs.enabled=true)
+    lokiEndpoint: ""  # If empty, uses local Loki service in same namespace
+
+prometheus:
+  enabled: true
+  # Using kube-prometheus-stack for simplicity
+  # In production, you might want to configure this separately
+  # For local testing, this configures Prometheus to scrape OTel Collector
+  scrapeOTelCollector:
+    enabled: true  # Set to false if using ServiceMonitor from app chart
+    interval: 30s
+    path: /metrics
+
+loki:
+  enabled: true
+  # Using Grafana Loki Helm chart values
+  # In production, configure according to your needs
+
+tempo:
+  enabled: true
+  # Using Grafana Tempo Helm chart values
+  # In production, configure according to your needs
+
+grafana:
+  enabled: true
+  adminPassword: admin
+  service:
+    type: ClusterIP
+    port: 3000
+  datasources:
+    prometheus:
+      enabled: true
+      url: http://prometheus-server:80
+    loki:
+      enabled: true
+      url: http://loki:3100
+    tempo:
+      enabled: true
+      url: http://tempo:3200

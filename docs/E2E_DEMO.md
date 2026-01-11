@@ -341,8 +341,12 @@ After completing all steps, you should see:
 ## Quick Reference
 
 ```bash
-# All-in-one commands
-./scripts/run-e2e-demo.sh                    # Automated setup
-make e2e-tests                                # Run e2e tests
-kubectl port-forward -n monitoring svc/grafana 3000:3000  # Access Grafana
+# All-in-one commands (RECOMMENDED)
+make e2e-tests                                # Run e2e tests (uses OpenTelemetry)
+
+# Interactive demo with observability stack
+./scripts/e2e-demo-otel.sh                    # Updated script with OpenTelemetry
+
+# Access Grafana
+kubectl port-forward -n observability svc/prometheus-grafana 3000:80  # Access Grafana
 ```

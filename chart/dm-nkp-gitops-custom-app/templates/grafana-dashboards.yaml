@@ -1,0 +1,94 @@
+{{- if .Values.grafana.dashboards.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-metrics
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.folder | default "/" }}
+data:
+  dashboard-metrics.json: |
+{{ .Files.Get "files/grafana/dashboard-metrics.json" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-logs
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.folder | default "/" }}
+data:
+  dashboard-logs.json: |
+{{ .Files.Get "files/grafana/dashboard-logs.json" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-traces
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.folder | default "/" }}
+data:
+  dashboard-traces.json: |
+{{ .Files.Get "files/grafana/dashboard-traces.json" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-resources
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.folder | default "/" }}
+data:
+  dashboard-resources.json: |
+{{ .Files.Get "files/grafana/dashboard-resources.json" | indent 4 }}
+{{- if .Values.grafana.dashboards.platformFootprint }}
+{{- if default true .Values.grafana.dashboards.platformFootprint.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-platform-footprint
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.platformFootprint.folder | default .Values.grafana.dashboards.folder | default "/Platform" }}
+data:
+  dashboard-platform-footprint.json: |
+{{ .Files.Get "files/grafana/dashboard-platform-footprint.json" | indent 4 }}
+{{- end }}
+{{- end }}
+{{- if .Values.grafana.dashboards.clusterFootprint }}
+{{- if default true .Values.grafana.dashboards.clusterFootprint.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-dashboard-cluster-footprint
+  namespace: {{ .Values.grafana.dashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana-folder: {{ .Values.grafana.dashboards.clusterFootprint.folder | default .Values.grafana.dashboards.folder | default "/Platform" }}
+data:
+  dashboard-cluster-footprint.json: |
+{{ .Files.Get "files/grafana/dashboard-cluster-footprint.json" | indent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

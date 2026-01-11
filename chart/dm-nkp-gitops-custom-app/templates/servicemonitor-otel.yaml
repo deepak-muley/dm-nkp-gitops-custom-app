@@ -1,0 +1,31 @@
+{{- if and .Values.opentelemetry.enabled .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-otel-collector
+  namespace: {{ include "dm-nkp-gitops-custom-app.monitoringNamespace" . }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  selector:
+    matchLabels:
+      {{- if .Values.monitoring.serviceMonitor.otelCollector.selectorLabels }}
+      {{- toYaml .Values.monitoring.serviceMonitor.otelCollector.selectorLabels | nindent 6 }}
+      {{- else }}
+      component: otel-collector
+      {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.monitoring.serviceMonitor.otelCollector.namespace | default "observability" }}
+  endpoints:
+    - port: {{ .Values.monitoring.serviceMonitor.otelCollector.prometheusPort | default "prometheus" }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout | default "10s" }}
+      path: {{ .Values.monitoring.serviceMonitor.otelCollector.prometheusPath | default "/metrics" }}
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: otel_collector
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: otel_collector_namespace
+{{- end }}

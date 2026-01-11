@@ -1,0 +1,31 @@
+apiVersion: v2
+name: observability-stack
+description: |
+  LOCAL TESTING ONLY - OpenTelemetry-based observability stack for local development and testing.
+  
+  This chart deploys:
+  - OpenTelemetry Collector
+  - Prometheus (via kube-prometheus-stack)
+  - Grafana Loki
+  - Grafana Tempo
+  - Grafana
+  
+  ⚠️  WARNING: This chart is for LOCAL TESTING ONLY.
+  
+  In production K8s clusters, these services are pre-deployed by the platform team.
+  The application Helm chart (dm-nkp-gitops-custom-app) deploys only app-specific CRs
+  (ServiceMonitor, Grafana Dashboards) that reference the pre-deployed platform services.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - opentelemetry
+  - prometheus
+  - loki
+  - tempo
+  - grafana
+  - observability
+  - local-testing
+maintainers:
+  - name: Deepak Muley
+home: https://github.com/deepak-muley/dm-nkp-gitops-custom-app

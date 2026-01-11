@@ -44,9 +44,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-            - name: metrics
-              containerPort: {{ .Values.service.metricsPort }}
-              protocol: TCP
           livenessProbe:
             httpGet:
               path: /health
@@ -64,8 +61,12 @@ spec:
           env:
             - name: PORT
               value: "{{ .Values.service.port }}"
-            - name: METRICS_PORT
-              value: "{{ .Values.service.metricsPort }}"
+            {{- if .Values.opentelemetry.enabled }}
+            {{- range .Values.opentelemetry.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            {{- end }}
           {{- if .Values.volumeMounts }}
           volumeMounts:
             {{- toYaml .Values.volumeMounts | nindent 12 }}

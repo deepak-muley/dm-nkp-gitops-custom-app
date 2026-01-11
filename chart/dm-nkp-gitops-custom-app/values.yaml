@@ -1,3 +1,40 @@
+# Default Values for dm-nkp-gitops-custom-app Helm Chart
+#
+# ⚠️ IMPORTANT: This file is used by DEFAULT if no -f flag is specified
+# Helm does NOT automatically select values-production.yaml or values-local-testing.yaml
+# You must explicitly specify them: helm install ... -f values-production.yaml
+#
+# ✅ PRODUCTION-READY (NKP Compatible): This default values.yaml is configured to work out-of-the-box
+#    in production environments (NKP with Mesosphere Kommander Applications), assuming platform services are pre-deployed:
+#    - OpenTelemetry Operator in 'opentelemetry' namespace (service matches CR name: collector, otelcol, etc.)
+#    - kube-prometheus-stack in 'monitoring' namespace (Prometheus, Grafana)
+#    - project-grafana-loki in 'monitoring' namespace (Loki)
+#    - Traefik + Gateway API in 'traefik-system' namespace
+#    - Gateway API CRDs v1.11.1 installed
+#
+#    If your platform services are in different locations, override using:
+#    - Custom values file: helm install ... -f my-values.yaml
+#    - Or --set flags: helm install ... --set opentelemetry.collector.endpoint=...
+#
+# For production-specific settings (autoscaling, more replicas, etc.):
+#   See values-production.yaml (must be explicitly specified with -f flag)
+#
+# For local testing with OpenTelemetry Operator + kube-prometheus-stack:
+#   See values-local-testing.yaml (must be explicitly specified with -f flag)
+
+# Namespace Configuration
+# The app will be deployed to this dedicated namespace by default
+# Usage: helm install <release-name> . --namespace dm-nkp-gitops-custom-app --create-namespace
+# The namespace template will create this namespace if it doesn't exist
+# Note: If deploying to a different namespace via --namespace flag, set namespace.create: false
+#       and namespace.name to match your target namespace, or let Helm handle namespace creation
+namespace:
+  create: true
+  name: "dm-nkp-gitops-custom-app"  # Default dedicated namespace for the application
+  annotations: {}
+  # Example annotations:
+  #   helm.sh/resource-policy: keep  # Prevent namespace deletion when uninstalling
+
 replicaCount: 2
 
 image:
@@ -60,7 +97,6 @@ securityContext:
 service:
   type: ClusterIP
   port: 8080
-  metricsPort: 9090
 
 ingress:
   enabled: false
@@ -72,6 +108,22 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+# Gateway API Configuration (Traefik + Gateway API) - NKP Compatible
+# Gateway API CRDs: gateway-api-crds/1.11.1 (Mesosphere Kommander)
+# Traefik: traefik/37.1.2 (Mesosphere Kommander)
+# Note: In production, Traefik with Gateway API support is pre-deployed by the platform team.
+# This chart deploys only the HTTPRoute resource that references the pre-deployed Gateway.
+# ⚠️ Verify Gateway API CRDs: kubectl get crd | grep gateway.networking.k8s.io
+# ⚠️ Verify Gateway: kubectl get gateway -A
+gateway:
+  enabled: true  # Enable HTTPRoute deployment (assumes Gateway API is pre-deployed)
+  parentRef:
+    name: "traefik"  # Common Gateway name (NKP default, verify: kubectl get gateway -A)
+    namespace: "traefik-system"  # Common namespace (NKP default, verify in your cluster)
+    # Alternative common namespaces: "traefik", "ingress", "gateway-system"
+  hostnames:
+    - "dm-nkp-gitops-custom-app.local"  # Hostnames for this HTTPRoute (update for production)
 
 resources:
   limits:
@@ -113,10 +165,138 @@ volumeMounts:
 # Security: Disable automount ServiceAccount Token (set to false if pod doesn't need Kubernetes API access)
 automountServiceAccountToken: true
 
+# OpenTelemetry Configuration - NKP Compatible (OpenTelemetry Operator)
+# Note: In production, OpenTelemetry Operator is pre-deployed by the platform team.
+# ⚠️ IMPORTANT: Service name matches OpenTelemetryCollector CR name exactly (not Deployment name)
+#   - Service name = CR name (e.g., if CR is 'collector', service is 'collector')
+#   - Deployment name = CR name + "-collector" suffix (e.g., 'collector-collector')
+# ⚠️ Verify service name: kubectl get svc -n opentelemetry | grep collector
+#   Check CR name: kubectl get opentelemetrycollector -n opentelemetry
+opentelemetry:
+  enabled: true
+  collector:
+    # NKP OpenTelemetry Operator collector endpoint (default)
+    # Service name matches OpenTelemetryCollector CR name exactly
+    # Default assumes OpenTelemetryCollector CR is named 'collector'
+    # Format: <cr-name>.<namespace>.svc.cluster.local:<port>
+    # Verify: kubectl get svc -n opentelemetry | grep collector
+    endpoint: "collector.opentelemetry.svc.cluster.local:4317"
+    # Alternative common names (if CR is named differently):
+    # endpoint: "otelcol.opentelemetry.svc.cluster.local:4317"
+    # endpoint: "opentelemetry-collector.opentelemetry.svc.cluster.local:4317"
+  service:
+    name: "dm-nkp-gitops-custom-app"
+    namespace: ""
+  # Environment variables for OpenTelemetry
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "collector.opentelemetry.svc.cluster.local:4317"  # NKP OpenTelemetry Operator (service matches CR name)
+      # Alternative (if CR name is different):
+      # value: "otelcol.opentelemetry.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "dm-nkp-gitops-custom-app"
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: "service.name=dm-nkp-gitops-custom-app,service.version=0.1.0"
+    - name: OTEL_EXPORTER_OTLP_INSECURE
+      value: "true"  # Set to false in production if using TLS
+
+# Legacy Prometheus ServiceMonitor (disabled by default when using OpenTelemetry)
 prometheus:
   serviceMonitor:
-    enabled: true
+    enabled: false  # Set to true if you want Prometheus to scrape directly (not recommended with OTel)
     interval: 30s
     scrapeTimeout: 10s
     path: /metrics
     port: metrics
+
+# Monitoring Configuration - App-specific CRs for pre-deployed platform services (NKP Compatible)
+# These CRs reference pre-deployed platform services (OpenTelemetry Operator, kube-prometheus-stack)
+monitoring:
+  # ServiceMonitor for scraping OTel Collector's Prometheus endpoint
+  # This CR is deployed by the app chart and references the pre-deployed OpenTelemetry Operator collector
+  serviceMonitor:
+    enabled: true
+    namespace: "monitoring"  # NKP: kube-prometheus-stack namespace (verify in your cluster)
+    # Alternative: "observability" if Prometheus is in observability namespace
+    # Empty = same as Release namespace if different from Prometheus Operator namespace
+    interval: 30s
+    scrapeTimeout: 10s
+    otelCollector:
+      # OpenTelemetry Operator uses standard labels (NKP compatible)
+      selectorLabels:
+        app.kubernetes.io/name: opentelemetry-collector
+        app.kubernetes.io/component: collector
+      namespace: "opentelemetry"  # NKP: OpenTelemetry Operator namespace
+      prometheusPort: "prometheus"  # Port name for OTel Collector Prometheus exporter endpoint
+      # This should match the port name in OTel Collector Service (typically "prometheus" for port 8889)
+      prometheusPath: "/metrics"  # Metrics path on OTel Collector
+
+# Grafana Configuration - App-specific dashboards and datasources (NKP Compatible)
+# Grafana is part of kube-prometheus-stack from Mesosphere Kommander
+# ⚠️ Verify namespace: kubectl get svc -A | grep grafana
+grafana:
+  # Dashboard ConfigMaps - App-specific dashboards
+  dashboards:
+    enabled: true
+    namespace: "monitoring"  # NKP: kube-prometheus-stack Grafana namespace (verify in your cluster)
+    # Alternative: "observability" if Grafana is in observability namespace
+    # Empty = same as Release namespace if different from Grafana namespace
+    folder: "/"  # Grafana folder for dashboards (adjust as needed)
+    # Dashboards will be deployed as ConfigMaps with:
+    #   - Label: grafana_dashboard=1 (for discovery)
+    #   - Annotation: grafana-folder (for folder assignment)
+    # Grafana must be configured to discover dashboards with label grafana_dashboard=1
+    
+    # Platform/Namespace Footprint Dashboard - Monitor entire namespaces or collection of namespaces
+    # Useful for understanding platform services footprint in NKP platform
+    platformFootprint:
+      enabled: true  # Enable platform footprint dashboard for namespace-wide monitoring
+      folder: "/Platform"  # Grafana folder for platform dashboards (separate from app dashboards)
+    
+    # Cluster-Wide Footprint Dashboard - Aggregated view of entire cluster footprint
+    # Provides cluster-level aggregated metrics for capacity planning and overall cluster health
+    clusterFootprint:
+      enabled: true  # Enable cluster-wide footprint dashboard for aggregated cluster view
+      folder: "/Platform"  # Grafana folder for cluster dashboards (same as platform dashboards)
+  
+  # Datasources Configuration - Optional (platform team may pre-configure)
+  # For kube-prometheus-stack: Datasources are typically configured via Helm values.
+  # This ConfigMap can be used as a reference or for manual provisioning.
+  datasources:
+    enabled: false  # Set to true only if platform team hasn't configured datasources
+    namespace: "monitoring"  # NKP: Same as Grafana namespace (verify in your cluster)
+    prometheus:
+      enabled: true
+      # kube-prometheus-stack service name pattern: <release-name>-kube-prometheus-prometheus
+      # Verify: kubectl get svc -A | grep prometheus
+      url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+      # Alternative common service names (verify in your cluster):
+      # url: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+      isDefault: true
+      editable: true
+      timeInterval: "15s"
+      httpMethod: "POST"
+    loki:
+      enabled: true
+      # Grafana Loki from Mesosphere Kommander (project-grafana-loki/0.80.5)
+      # Verify service name: kubectl get svc -A | grep loki
+      url: "http://project-grafana-loki-gateway.monitoring.svc.cluster.local:80"
+      # Alternative common service names (verify in your cluster):
+      # url: "http://project-grafana-loki.monitoring.svc.cluster.local:3100"
+      # url: "http://loki-gateway.monitoring.svc.cluster.local:80"
+      # url: "http://loki.monitoring.svc.cluster.local:3100"
+      editable: true
+      maxLines: 1000
+    tempo:
+      enabled: true
+      # Update URL to match your NKP Tempo service (if Tempo is deployed)
+      # Verify: kubectl get svc -A | grep tempo
+      url: "http://tempo.monitoring.svc.cluster.local:3200"
+      editable: true
+      httpMethod: "GET"
+      tracesToLogsTags:
+        - "job"
+        - "instance"
+        - "pod"
+        - "namespace"
+        - "service.name"

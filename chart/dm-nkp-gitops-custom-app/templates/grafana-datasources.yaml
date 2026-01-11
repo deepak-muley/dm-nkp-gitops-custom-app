@@ -1,0 +1,87 @@
+{{- if .Values.grafana.datasources.enabled }}
+# Grafana Datasources Configuration
+# This ConfigMap configures Grafana data sources (Prometheus, Loki, Tempo)
+# Note: This is optional - Grafana may have datasources pre-configured by platform team
+# Only use this if platform team hasn't configured datasources already
+#
+# For kube-prometheus-stack: Datasources can be auto-discovered if Grafana is configured
+# with additionalDataSources or via provisioning ConfigMaps.
+# This ConfigMap should be in the same namespace as Grafana.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-grafana-datasources
+  namespace: {{ include "dm-nkp-gitops-custom-app.grafanaNamespace" . }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    {{- if .Values.grafana.datasources.prometheus.enabled }}
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: {{ .Values.grafana.datasources.prometheus.url }}
+      uid: prometheus
+      isDefault: {{ .Values.grafana.datasources.prometheus.isDefault | default true }}
+      editable: {{ .Values.grafana.datasources.prometheus.editable | default true }}
+      jsonData:
+        timeInterval: {{ .Values.grafana.datasources.prometheus.timeInterval | default "15s" }}
+        httpMethod: {{ .Values.grafana.datasources.prometheus.httpMethod | default "POST" }}
+    {{- end }}
+    {{- if .Values.grafana.datasources.loki.enabled }}
+    - name: Loki
+      type: loki
+      access: proxy
+      url: {{ .Values.grafana.datasources.loki.url }}
+      uid: loki
+      editable: {{ .Values.grafana.datasources.loki.editable | default true }}
+      jsonData:
+        maxLines: {{ .Values.grafana.datasources.loki.maxLines | default 1000 }}
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: "traceID=(\\w+)"
+            name: TraceID
+            url: '$${__value.raw}'
+    {{- end }}
+    {{- if .Values.grafana.datasources.tempo.enabled }}
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: {{ .Values.grafana.datasources.tempo.url }}
+      uid: tempo
+      editable: {{ .Values.grafana.datasources.tempo.editable | default true }}
+      jsonData:
+        httpMethod: {{ .Values.grafana.datasources.tempo.httpMethod | default "GET" }}
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        search:
+          hide: false
+        tracesToLogs:
+          datasourceUid: loki
+          tags: {{ .Values.grafana.datasources.tempo.tracesToLogsTags | default (list "job" "instance" "pod" "namespace" "service.name") | toJson }}
+          mappedTags: 
+            - key: "service.name"
+              value: "service"
+          mapTagNamesEnabled: false
+          spanStartTimeShift: "1h"
+          spanEndTimeShift: "1h"
+          filterByTraceID: false
+          filterBySpanID: false
+        tracesToMetrics:
+          datasourceUid: prometheus
+          tags: 
+            - key: "service.name"
+              value: "service"
+            - key: "job"
+          queries:
+            - name: "Sample query"
+              query: "sum(rate(tempo_spanmetrics_latency_bucket{$$__tags}[5m]))"
+    {{- end }}
+{{- end }}
+

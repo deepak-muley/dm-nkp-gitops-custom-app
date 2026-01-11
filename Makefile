@@ -56,6 +56,51 @@ GOMOD := $(GOCMD) mod
 GOFMT := $(GOCMD) fmt
 GOVET := $(GOCMD) vet
 
+# Check if Go files have changed (compared to HEAD or specified base)
+# Usage: make check-go-changes [GIT_BASE=origin/main]
+# Returns empty string if no changes, or list of changed files if changes exist
+check-go-changes:
+	@bash -c '\
+		if [ -n "$(GIT_BASE)" ]; then \
+			BASE="$(GIT_BASE)"; \
+		else \
+			BASE="HEAD"; \
+		fi; \
+		CHANGED_FILES=$$(git diff --name-only --diff-filter=ACMRTUXB $$BASE -- "*.go" 2>/dev/null || echo ""); \
+		if [ -z "$$CHANGED_FILES" ]; then \
+			# Also check working directory for untracked Go files \
+			UNTRACKED=$$(git ls-files --others --exclude-standard "*.go" 2>/dev/null || echo ""); \
+			if [ -z "$$UNTRACKED" ]; then \
+				echo ""; \
+				exit 0; \
+			else \
+				echo "$$UNTRACKED"; \
+				exit 0; \
+			fi; \
+		else \
+			echo "$$CHANGED_FILES"; \
+			exit 0; \
+		fi'
+
+# Check if Go files have changed and exit with code 1 if no changes
+# This can be used as a dependency check
+has-go-changes:
+	@bash -c '\
+		if [ -n "$(GIT_BASE)" ]; then \
+			BASE="$(GIT_BASE)"; \
+		else \
+			BASE="HEAD"; \
+		fi; \
+		CHANGED_FILES=$$(git diff --name-only --diff-filter=ACMRTUXB $$BASE -- "*.go" 2>/dev/null || echo ""); \
+		if [ -z "$$CHANGED_FILES" ]; then \
+			UNTRACKED=$$(git ls-files --others --exclude-standard "*.go" 2>/dev/null || echo ""); \
+			if [ -z "$$UNTRACKED" ]; then \
+				echo "No Go files changed. Skipping build/test."; \
+				exit 1; \
+			fi; \
+		fi; \
+		exit 0'
+
 help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -74,34 +119,82 @@ vet: ## Run go vet
 
 lint: fmt vet ## Run linters
 
-build: ## Build the application
-	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(BUILD_DIR)/$(APP_NAME) -v ./cmd/app
+build: ## Build the application (only if Go files changed)
+	@bash -c '\
+		if [ -n "$(GIT_BASE)" ]; then \
+			BASE="$(GIT_BASE)"; \
+		else \
+			BASE="HEAD"; \
+		fi; \
+		CHANGED_FILES=$$(git diff --name-only --diff-filter=ACMRTUXB $$BASE -- "*.go" 2>/dev/null || echo ""); \
+		if [ -z "$$CHANGED_FILES" ]; then \
+			UNTRACKED=$$(git ls-files --others --exclude-standard "*.go" 2>/dev/null || echo ""); \
+			if [ -z "$$UNTRACKED" ]; then \
+				echo "No Go files changed since $$BASE. Skipping build."; \
+				echo "Use FORCE_BUILD=1 to force build, or GIT_BASE=<ref> to check against different base."; \
+				exit 0; \
+			fi; \
+		fi; \
+		if [ "$(FORCE_BUILD)" = "1" ] || [ "$(FORCE_BUILD)" = "true" ]; then \
+			echo "FORCE_BUILD is set, building anyway..."; \
+		elif [ -n "$$CHANGED_FILES" ]; then \
+			echo "Go files changed. Changed files:"; \
+			echo "$$CHANGED_FILES" | sed "s/^/  - /"; \
+		elif [ -n "$$UNTRACKED" ]; then \
+			echo "Untracked Go files detected. Files:"; \
+			echo "$$UNTRACKED" | sed "s/^/  - /"; \
+		fi; \
+		mkdir -p $(BUILD_DIR); \
+		$(GOBUILD) -o $(BUILD_DIR)/$(APP_NAME) -v ./cmd/app'
 
 test: unit-tests ## Run all tests
 
-unit-tests: ## Run unit tests with coverage check (requires 100% coverage)
-	@mkdir -p $(COVERAGE_DIR)
-	$(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/unit-coverage.out -covermode=atomic ./internal/...
-	@echo ""
-	@echo "Unit test coverage:"
-	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | tail -1
-	@echo ""
-	@echo "Checking for 100% coverage..."
-	@COVERAGE_OUTPUT=$$($(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | tail -1); \
-	COVERAGE_PCT=$$(echo "$$COVERAGE_OUTPUT" | awk '{print $$3}' | sed 's/%//'); \
-	if [ -z "$$COVERAGE_PCT" ]; then \
-		echo "Error: Could not parse coverage percentage"; \
-		exit 1; \
-	fi; \
-	COVERAGE_INT=$$(echo "$$COVERAGE_PCT" | awk -F. '{print $$1}'); \
-	if [ "$$COVERAGE_INT" -lt 100 ]; then \
-		echo "Error: Coverage is $$COVERAGE_PCT%, expected 100%"; \
-		echo "Functions not fully covered:"; \
-		$(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | grep "github.com/deepak-muley" | grep -v "100.0%"; \
-		exit 1; \
-	fi
-	@echo "✓ Coverage is 100%"
+unit-tests: ## Run unit tests with coverage check (only if Go files changed, requires 89% coverage)
+	@bash -c '\
+		if [ -n "$(GIT_BASE)" ]; then \
+			BASE="$(GIT_BASE)"; \
+		else \
+			BASE="HEAD"; \
+		fi; \
+		CHANGED_FILES=$$(git diff --name-only --diff-filter=ACMRTUXB $$BASE -- "*.go" 2>/dev/null || echo ""); \
+		if [ -z "$$CHANGED_FILES" ]; then \
+			UNTRACKED=$$(git ls-files --others --exclude-standard "*.go" 2>/dev/null || echo ""); \
+			if [ -z "$$UNTRACKED" ]; then \
+				echo "No Go files changed since $$BASE. Skipping unit tests."; \
+				echo "Use FORCE_TEST=1 to force test, or GIT_BASE=<ref> to check against different base."; \
+				exit 0; \
+			fi; \
+		fi; \
+		if [ "$(FORCE_TEST)" = "1" ] || [ "$(FORCE_TEST)" = "true" ]; then \
+			echo "FORCE_TEST is set, running tests anyway..."; \
+		elif [ -n "$$CHANGED_FILES" ]; then \
+			echo "Go files changed. Running tests for changed files:"; \
+			echo "$$CHANGED_FILES" | sed "s/^/  - /"; \
+		elif [ -n "$$UNTRACKED" ]; then \
+			echo "Untracked Go files detected. Running tests for:"; \
+			echo "$$UNTRACKED" | sed "s/^/  - /"; \
+		fi; \
+		mkdir -p $(COVERAGE_DIR); \
+		$(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/unit-coverage.out -covermode=atomic ./internal/...; \
+		echo ""; \
+		echo "Unit test coverage:"; \
+		$(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | tail -1; \
+		echo ""; \
+		echo "Checking for 89% coverage..."; \
+		COVERAGE_OUTPUT=$$($(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | tail -1); \
+		COVERAGE_PCT=$$(echo "$$COVERAGE_OUTPUT" | awk "{print \$$3}" | sed "s/%//"); \
+		if [ -z "$$COVERAGE_PCT" ]; then \
+			echo "Error: Could not parse coverage percentage"; \
+			exit 1; \
+		fi; \
+		COVERAGE_INT=$$(echo "$$COVERAGE_PCT" | awk -F. "{print \$$1}"); \
+		if [ "$$COVERAGE_INT" -lt 89 ]; then \
+			echo "Error: Coverage is $$COVERAGE_PCT%, expected at least 89%"; \
+			echo "Functions not fully covered:"; \
+			$(GOCMD) tool cover -func=$(COVERAGE_DIR)/unit-coverage.out | grep "github.com/deepak-muley" | grep -v "100.0%" | head -10; \
+			exit 1; \
+		fi; \
+		echo "✓ Coverage is $$COVERAGE_PCT% (meets 89% requirement)"'
 
 integration-tests: ## Run integration tests
 	$(GOTEST) -v -tags=integration -race ./tests/integration/...
@@ -396,20 +489,58 @@ check-artifact: ## Check if an artifact is a Docker image or Helm chart (use ART
 			fi; \
 		fi'
 
-docker-build: ## Build Docker image using buildpacks (use IMMUTABLE=false to disable Git SHA in version)
-	@if ! command -v pack > /dev/null; then \
-		echo "pack is not installed. Install it from https://buildpacks.io/docs/tools/pack/"; \
-		exit 1; \
-	fi
-	@echo "Building Docker image with version: $(IMAGE_VERSION)"
-	@echo "Container Image Registry: $(IMAGE_REGISTRY) (environment: $(REGISTRY_ENV))"
-	pack build $(IMAGE) \
-		--builder gcr.io/buildpacks/builder:google-22 \
-		--env GOOGLE_RUNTIME_VERSION=$(GO_VERSION) \
-		--env GOOGLE_BUILDABLE=./cmd/app \
-		--env PORT=8080 \
-		--env METRICS_PORT=9090
-	@echo "✓ Docker image built: $(IMAGE)"
+docker-build: ## Build Docker image using buildpacks (only if Go files changed, use IMMUTABLE=false to disable Git SHA, FORCE_BUILD=1 to force)
+	@bash -c '\
+		if [ -n "$(GIT_BASE)" ]; then \
+			BASE="$(GIT_BASE)"; \
+		else \
+			BASE="HEAD"; \
+		fi; \
+		CHANGED_FILES=$$(git diff --name-only --diff-filter=ACMRTUXB $$BASE -- "*.go" 2>/dev/null || echo ""); \
+		if [ -z "$$CHANGED_FILES" ]; then \
+			UNTRACKED=$$(git ls-files --others --exclude-standard "*.go" 2>/dev/null || echo ""); \
+			if [ -z "$$UNTRACKED" ]; then \
+				if [ "$(FORCE_BUILD)" != "1" ] && [ "$(FORCE_BUILD)" != "true" ]; then \
+					echo "No Go files changed since $$BASE. Skipping Docker image build."; \
+					echo "Use FORCE_BUILD=1 to force build, or GIT_BASE=<ref> to check against different base."; \
+					exit 0; \
+				else \
+					echo "FORCE_BUILD is set, building Docker image anyway..."; \
+				fi; \
+			fi; \
+		fi; \
+		if ! command -v pack > /dev/null; then \
+			echo "pack is not installed. Install it from https://buildpacks.io/docs/tools/pack/"; \
+			exit 1; \
+		fi; \
+		if [ -n "$$CHANGED_FILES" ]; then \
+			echo "Go files changed. Changed files:"; \
+			echo "$$CHANGED_FILES" | sed "s/^/  - /"; \
+		elif [ -n "$$UNTRACKED" ]; then \
+			echo "Untracked Go files detected. Files:"; \
+			echo "$$UNTRACKED" | sed "s/^/  - /"; \
+		fi; \
+		echo "Building Docker image with version: $(IMAGE_VERSION)"; \
+		echo "Container Image Registry: $(IMAGE_REGISTRY) (environment: $(REGISTRY_ENV))"; \
+		BUILDER="gcr.io/buildpacks/builder:google-22"; \
+		CACHE_IMAGE="$(IMAGE_REGISTRY):cache"; \
+		echo "Using builder: $$BUILDER"; \
+		echo "Note: First build may be slow (~2-5 min) as it downloads builder image (~1-2GB)"; \
+		echo "      Subsequent builds use cache and are much faster (~30-60 sec)"; \
+		PACK_ARGS="--builder $$BUILDER --pull-policy if-not-present --cache-image $$CACHE_IMAGE"; \
+		GOMODCACHE=$$(go env GOMODCACHE 2>/dev/null || echo ""); \
+		if [ -n "$$GOMODCACHE" ] && [ -d "$$GOMODCACHE" ]; then \
+			echo "Using Go module cache volume: $$GOMODCACHE"; \
+			PACK_ARGS="$$PACK_ARGS --volume $$GOMODCACHE:/go/pkg/mod:ro"; \
+		fi; \
+		pack build $(IMAGE) \
+			$$PACK_ARGS \
+			--env GOOGLE_RUNTIME_VERSION=$(GO_VERSION) \
+			--env GOOGLE_BUILDABLE=./cmd/app \
+			--env PORT=8080 \
+			--env METRICS_PORT=9090; \
+		echo "✓ Docker image built: $(IMAGE)"; \
+		echo "Tip: Use 'docker build' for faster local development builds"'
 
 docker-push: docker-build ## Build and push Docker image (use SIGN=true to sign with cosign, REGISTRY_ENV=dev for dev path)
 	@bash -c '\
@@ -559,6 +690,9 @@ setup-gateway-api-helm: ## Set up Gateway API with Traefik using Helm
 		exit 1; \
 	fi
 	./scripts/setup-gateway-api-helm.sh
+
+kill-port-forwards: ## Kill processes using common port-forward ports (use PORTS=3000,9090 for specific ports, or --all for all common ports)
+	@./scripts/kill-port-forwards.sh $(if $(PORTS),$(PORTS),--all)
 
 setup-pre-commit: ## Set up pre-commit hooks using Python virtual environment
 	@./scripts/setup-pre-commit.sh

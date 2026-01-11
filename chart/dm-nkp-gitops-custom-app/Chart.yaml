@@ -1,13 +1,29 @@
 apiVersion: v2
 name: dm-nkp-gitops-custom-app
-description: A Helm chart for dm-nkp-gitops-custom-app
+description: |
+  Helm chart for dm-nkp-gitops-custom-app with OpenTelemetry observability.
+  
+  This chart deploys:
+  - Application deployment
+  - ServiceMonitor CR (for Prometheus scraping of OTel Collector)
+  - Grafana Dashboard ConfigMaps (for metrics, logs, and traces visualization)
+  
+  In production, platform services (OTel Collector, Prometheus, Loki, Tempo, Grafana)
+  are pre-deployed by the platform team. This chart deploys only app-specific CRs
+  that reference the pre-deployed platform services.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
 keywords:
+  - opentelemetry
   - prometheus
+  - loki
+  - tempo
+  - grafana
   - metrics
-  - monitoring
+  - logs
+  - traces
+  - observability
 maintainers:
   - name: Deepak Muley
 home: https://github.com/deepak-muley/dm-nkp-gitops-custom-app

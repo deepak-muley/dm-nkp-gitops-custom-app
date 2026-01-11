@@ -1,0 +1,169 @@
+# Local Testing Values - For use with OpenTelemetry Operator and kube-prometheus-stack
+# This is used when deploying locally for testing with OpenTelemetry Operator
+#
+# Usage:
+#   1. Deploy OpenTelemetry Operator (for local testing):
+#      kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
+#      OR via Helm:
+#      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+#      helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+#        --namespace opentelemetry --create-namespace
+#
+#   2. Create OpenTelemetryCollector CR (or use default collector):
+#      kubectl apply -f - <<EOF
+#      apiVersion: opentelemetry.io/v1alpha1
+#      kind: OpenTelemetryCollector
+#      metadata:
+#        name: collector
+#        namespace: opentelemetry
+#      spec:
+#        mode: deployment
+#        config: |
+#          receivers:
+#            otlp:
+#              protocols:
+#                grpc:
+#                  endpoint: 0.0.0.0:4317
+#          exporters:
+#            prometheus:
+#              endpoint: 0.0.0.0:8889
+#            logging:
+#          service:
+#            pipelines:
+#              metrics:
+#                receivers: [otlp]
+#                exporters: [prometheus]
+#      EOF
+#
+#   3. Deploy kube-prometheus-stack (for Prometheus/Grafana):
+#      helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#      helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+#        --namespace monitoring --create-namespace
+#
+#   4. Deploy application with these values:
+#      helm upgrade --install dm-nkp-gitops-custom-app . \
+#        --namespace default -f values-local-testing.yaml
+
+# Image configuration (local testing)
+image:
+  repository: dm-nkp-gitops-custom-app
+  tag: "test"  # Local testing image
+  pullPolicy: Never  # For kind/minikube
+
+# OpenTelemetry Configuration - References locally deployed OpenTelemetry Operator
+# OpenTelemetry Operator is installed in 'opentelemetry' namespace
+# ⚠️ IMPORTANT: Service name matches the OpenTelemetryCollector CR name (not Deployment name)
+#   - Service name = CR name exactly (e.g., if CR is 'collector', service is 'collector')
+#   - Deployment name = CR name + "-collector" suffix (e.g., 'collector-collector')
+# ⚠️ Verify service name: kubectl get svc -n opentelemetry | grep collector
+#   Check CR name: kubectl get opentelemetrycollector -n opentelemetry
+opentelemetry:
+  enabled: true
+  collector:
+    # Local OpenTelemetry Operator collector endpoint
+    # Service name matches OpenTelemetryCollector CR name exactly
+    # Default assumes OpenTelemetryCollector CR is named 'collector'
+    # Update based on your actual OpenTelemetryCollector CR name
+    endpoint: "collector.opentelemetry.svc.cluster.local:4317"
+    # Alternative common names (if CR is named differently):
+    # endpoint: "otelcol.opentelemetry.svc.cluster.local:4317"
+    # endpoint: "opentelemetry-collector.opentelemetry.svc.cluster.local:4317"
+  service:
+    name: "dm-nkp-gitops-custom-app"
+    namespace: ""
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "collector.opentelemetry.svc.cluster.local:4317"
+      # Alternative (update based on your OpenTelemetryCollector CR name):
+      # value: "otelcol.opentelemetry.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "dm-nkp-gitops-custom-app"
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: "service.name=dm-nkp-gitops-custom-app,service.version=0.1.0,environment=local"
+    - name: OTEL_EXPORTER_OTLP_INSECURE
+      value: "true"  # Local testing uses insecure connection
+
+# Monitoring Configuration - References locally deployed kube-prometheus-stack
+# ⚠️ IMPORTANT: ServiceMonitor will be deployed to Release.Namespace by default
+#   If Prometheus Operator is in a different namespace, set the namespace value
+#   Make sure the Prometheus Operator can discover ServiceMonitors in that namespace
+monitoring:
+  serviceMonitor:
+    enabled: true
+    # Use Release.Namespace for local testing (set to "monitoring" if Prometheus Operator requires it)
+    namespace: ""  # Empty = Release.Namespace (default), or set to "monitoring" if Prometheus Operator is there
+    interval: 30s
+    scrapeTimeout: 10s
+    otelCollector:
+      # OpenTelemetry Operator uses standard labels (same as NKP)
+      selectorLabels:
+        app.kubernetes.io/name: opentelemetry-collector
+        app.kubernetes.io/component: collector
+      namespace: "opentelemetry"  # OpenTelemetry Operator namespace
+      prometheusPort: "otlp"  # Common port name for OTel Operator collector (verify)
+      # Alternative: "prometheus" if collector exposes Prometheus metrics on separate port
+      prometheusPath: "/metrics"
+
+# Gateway API Configuration - Optional for local testing
+# Only enable if Traefik with Gateway API is installed in the test cluster
+# Gateway API CRDs: Install via: kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+gateway:
+  enabled: false  # Disabled by default for local testing (can enable if Gateway API is installed)
+  parentRef:
+    name: "traefik"
+    namespace: "traefik-system"
+  hostnames:
+    - "dm-nkp-gitops-custom-app.local"
+
+# Grafana Dashboard Configuration - References locally deployed kube-prometheus-stack Grafana
+# ⚠️ IMPORTANT: For local testing, Grafana dashboards will be deployed to Release.Namespace by default
+#   If kube-prometheus-stack is deployed in "monitoring" namespace, you can:
+#   1. Create the monitoring namespace first: kubectl create namespace monitoring
+#   2. Or deploy kube-prometheus-stack to the same namespace as the app
+#   3. Or set namespace: "" to use Release.Namespace
+grafana:
+  dashboards:
+    enabled: true
+    # Use Release.Namespace for local testing (set to "monitoring" if kube-prometheus-stack is there)
+    namespace: ""  # Empty = Release.Namespace (default), or set to "monitoring" if that namespace exists
+    folder: "/"  # Root folder for local testing
+  
+  # Datasources Configuration - Disabled by default for local testing
+  # Note: For kube-prometheus-stack, datasources are typically configured via Helm values
+  # Enable this only if you need to manually provision datasources
+  datasources:
+    enabled: false  # Disabled by default - kube-prometheus-stack configures datasources automatically
+    namespace: ""  # Empty = Release.Namespace (default), or set to "monitoring" if that namespace exists
+    prometheus:
+      enabled: true
+      # kube-prometheus-stack service name pattern: <release-name>-kube-prometheus-prometheus
+      # Common release name: "prometheus" for local testing
+      url: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+      # Alternative (if release name is different):
+      # url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+      isDefault: true
+    loki:
+      enabled: true
+      # Update URL if Loki is deployed locally (optional for local testing)
+      # Verify: kubectl get svc -A | grep loki
+      url: "http://loki.monitoring.svc.cluster.local:3100"
+      # Alternative (if using project-grafana-loki locally):
+      # url: "http://project-grafana-loki-gateway.monitoring.svc.cluster.local:80"
+    tempo:
+      enabled: true
+      # Update URL if Tempo is deployed locally (optional for local testing)
+      # Verify: kubectl get svc -A | grep tempo
+      url: "http://tempo.monitoring.svc.cluster.local:3200"
+
+# Resource limits for local testing (smaller)
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# No autoscaling for local testing
+autoscaling:
+  enabled: false
