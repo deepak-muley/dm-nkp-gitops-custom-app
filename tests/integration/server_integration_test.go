@@ -18,12 +18,10 @@ import (
 var _ = Describe("Server Integration", func() {
 	var srv *server.Server
 	var baseURL string
-	var metricsURL string
 
 	BeforeEach(func() {
 		baseURL = "http://localhost:8080"
-		metricsURL = "http://localhost:9090"
-		srv = server.New("8080", "9090")
+		srv = server.New("8080")
 
 		go func() {
 			if err := srv.Start(); err != nil && err != http.ErrServerClosed {
@@ -73,26 +71,7 @@ var _ = Describe("Server Integration", func() {
 		})
 	})
 
-	Describe("Metrics endpoint", func() {
-		It("should expose Prometheus metrics", func() {
-			resp, err := http.Get(metricsURL + "/metrics")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(http.StatusOK))
-			resp.Body.Close()
-		})
-
-		It("should include custom metrics", func() {
-			// Make a request to generate metrics
-			_, _ = http.Get(baseURL + "/")
-
-			// Check metrics endpoint
-			resp, err := http.Get(metricsURL + "/metrics")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(http.StatusOK))
-
-			// Read response body to verify metrics are present
-			// In a real scenario, you might parse the metrics
-			resp.Body.Close()
-		})
-	})
+	// Metrics endpoint tests removed - metrics are now exported via OpenTelemetry
+	// rather than via a separate /metrics HTTP endpoint
+	// Metrics are collected by the OTel Collector and forwarded to Prometheus
 })
