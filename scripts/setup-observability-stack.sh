@@ -1,11 +1,10 @@
 #!/bin/bash
 # Script to set up the OpenTelemetry-based observability stack
-# This includes: OTel Collector, Prometheus, Loki, Tempo, and Grafana
+# This includes: OTel Operator, Prometheus, Loki, Tempo, and Grafana
 
 set -euo pipefail
 
 NAMESPACE="observability"
-OTEL_COLLECTOR_CHART="chart/observability-stack"
 
 echo "Setting up OpenTelemetry-based Observability Stack..."
 
@@ -32,24 +31,65 @@ helm repo update
 
 # Install Prometheus (via kube-prometheus-stack which includes Grafana)
 echo "Installing Prometheus and Grafana via kube-prometheus-stack..."
-helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+# Note: If upgrade fails due to CRD schema issues (e.g., ServiceMonitor schema mismatch),
+# you may need to uninstall and reinstall: helm uninstall prometheus -n ${NAMESPACE}
+INSTALL_ERROR_FILE="/tmp/prometheus-install-$$.log"
+if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
   --namespace ${NAMESPACE} \
   --set prometheus.prometheusSpec.retention=30d \
   --set grafana.adminPassword=admin \
-  --wait
+  --wait 2>&1 | tee "$INSTALL_ERROR_FILE"; then
+  echo "Prometheus and Grafana installed/upgraded successfully"
+  rm -f "$INSTALL_ERROR_FILE"
+else
+  INSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
+  if echo "$INSTALL_ERROR" | grep -q "field not declared in schema"; then
+    echo "Warning: Upgrade failed due to CRD schema mismatch (ServiceMonitor CRD version incompatibility)"
+    echo "Automatically uninstalling and reinstalling to fix CRD version mismatch..."
+    helm uninstall prometheus -n ${NAMESPACE} 2>/dev/null || true
+    sleep 5
+    # Reinstall with fresh CRDs
+    if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+      --namespace ${NAMESPACE} \
+      --set prometheus.prometheusSpec.retention=30d \
+      --set grafana.adminPassword=admin \
+      --wait; then
+      echo "Prometheus reinstalled successfully after CRD fix"
+    else
+      echo "Warning: Prometheus reinstallation had issues"
+    fi
+  else
+    echo "Warning: Prometheus installation had issues: $(echo "$INSTALL_ERROR" | head -3)"
+  fi
+  rm -f "$INSTALL_ERROR_FILE"
+fi
 
-# Install Loki
+# Install Loki (using loki-simple-scalable for single-node kind clusters)
 echo "Installing Loki for logs..."
-helm upgrade --install loki grafana/loki-stack \
+# Note: grafana/loki-stack is deprecated, using loki-simple-scalable for local/testing clusters
+# loki-simple-scalable works better for single-node kind clusters (no anti-affinity issues)
+if helm upgrade --install loki grafana/loki-simple-scalable \
   --namespace ${NAMESPACE} \
-  --set loki.enabled=true \
-  --set promtail.enabled=true \
-  --set grafana.enabled=false \
-  --wait || {
-    echo "Note: If loki-stack chart is deprecated, try installing Loki separately:"
-    echo "  helm repo add grafana https://grafana.github.io/helm-charts"
-    echo "  helm install loki grafana/loki --namespace ${NAMESPACE}"
-  }
+  --set singleBinary.replicas=1 \
+  --wait; then
+  echo "Loki installed successfully (using loki-simple-scalable)"
+else
+  echo "Warning: loki-simple-scalable installation had issues, trying loki-distributed with anti-affinity disabled..."
+  # Fallback: try loki-distributed with anti-affinity disabled for single-node clusters
+  if helm upgrade --install loki grafana/loki-distributed \
+    --namespace ${NAMESPACE} \
+    --set loki.read.replicas=1 \
+    --set loki.write.replicas=1 \
+    --set loki.read.affinity='' \
+    --set loki.write.affinity='' \
+    --set loki.backend.affinity='' \
+    --wait; then
+    echo "Loki installed successfully (using loki-distributed with anti-affinity disabled)"
+  else
+    echo "Warning: Loki installation failed with both charts"
+    echo "Loki is required for logs. Please install manually."
+  fi
+fi
 
 # Install Tempo
 echo "Installing Tempo for traces..."
@@ -60,22 +100,64 @@ helm upgrade --install tempo grafana/tempo \
     echo "Note: If tempo chart is not available, you may need to install it manually"
   }
 
-# Install OpenTelemetry Collector
-echo "Installing OpenTelemetry Collector..."
-if [ -f "${OTEL_COLLECTOR_CHART}/Chart.yaml" ]; then
-  helm upgrade --install otel-collector ${OTEL_COLLECTOR_CHART} \
-    --namespace ${NAMESPACE} \
-    --wait || {
-      echo "Warning: Failed to install OTel Collector from local chart"
-      echo "You may need to install it manually or use the official chart"
-    }
+# Install cert-manager (required by OTel Operator for webhook certificates)
+echo "Installing cert-manager (required by OTel Operator)..."
+helm repo add jetstack https://charts.jetstack.io || true
+helm repo update || true
+
+if helm list -n cert-manager 2>/dev/null | grep -q cert-manager; then
+  echo "cert-manager already installed"
 else
-  echo "Warning: Local OTel Collector chart not found. Installing from upstream..."
-  helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
-  helm repo update
-  helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
-    --namespace ${NAMESPACE} \
-    --wait || echo "Note: OTel Collector installation may need manual configuration"
+  echo "Installing cert-manager..."
+  if helm upgrade --install cert-manager jetstack/cert-manager \
+    --namespace cert-manager \
+    --create-namespace \
+    --set installCRDs=true \
+    --wait; then
+    echo "cert-manager installed successfully"
+    # Wait for cert-manager webhook to be ready
+    echo "Waiting for cert-manager webhook to be ready..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=3m 2>/dev/null || echo "cert-manager webhook may not be ready yet"
+  else
+    echo "Warning: cert-manager installation failed"
+    echo "OTel Operator requires cert-manager. Please install manually:"
+    echo "  helm repo add jetstack https://charts.jetstack.io"
+    echo "  helm repo update"
+    echo "  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
+  fi
+fi
+
+# Install OpenTelemetry Operator (preferred approach for platform)
+echo "Installing OpenTelemetry Operator..."
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
+helm repo update || true
+
+# Check if OTel Operator is already installed
+if helm list -n opentelemetry-operator-system 2>/dev/null | grep -q opentelemetry-operator; then
+  echo "OTel Operator Helm release already exists, checking if operator is running..."
+  if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
+    echo "OTel Operator is already installed and running"
+  else
+    echo "Upgrading OTel Operator..."
+    helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+      --namespace opentelemetry-operator-system \
+      --create-namespace \
+      --set manager.collectorImage.repository=otel/opentelemetry-collector-contrib \
+      --wait || {
+        echo "Warning: Failed to upgrade OTel Operator"
+        echo "You may need to install it manually"
+      }
+  fi
+else
+  echo "Installing OTel Operator via Helm..."
+  helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+    --namespace opentelemetry-operator-system \
+    --create-namespace \
+    --set manager.collectorImage.repository=otel/opentelemetry-collector-contrib \
+    --wait || {
+      echo "Warning: Failed to install OTel Operator"
+      echo "You may need to install it manually"
+    }
 fi
 
 # Configure Grafana data sources (Prometheus, Loki, Tempo)
@@ -128,16 +210,42 @@ echo "To access Prometheus:"
 echo "  kubectl port-forward -n ${NAMESPACE} svc/prometheus-kube-prometheus-prometheus 9090:9090"
 echo "  URL: http://localhost:9090"
 echo ""
-echo "OpenTelemetry Collector OTLP endpoint:"
-echo "  gRPC: otel-collector.${NAMESPACE}.svc.cluster.local:4317"
-echo "  HTTP: otel-collector.${NAMESPACE}.svc.cluster.local:4318"
+echo "OpenTelemetry Operator installed"
+echo "  Namespace: opentelemetry-operator-system"
 echo ""
 echo "Next Steps:"
-echo "  1. Deploy your application with OpenTelemetry enabled"
-echo "  2. Application chart will deploy Grafana dashboards automatically"
-echo "  3. Configure Grafana to discover dashboards from ConfigMaps (may need manual setup)"
+echo "  1. Create an OpenTelemetryCollector CR in ${NAMESPACE} namespace"
+echo "  2. Deploy your application with OpenTelemetry enabled"
+echo "  3. Application chart will deploy Grafana dashboards automatically"
+echo "  4. Configure Grafana to discover dashboards from ConfigMaps (may need manual setup)"
 echo ""
-echo "Configure your application with:"
+echo "Create OpenTelemetryCollector CR (example):"
+echo "  kubectl apply -f - <<EOF"
+echo "  apiVersion: opentelemetry.io/v1beta1"
+echo "  kind: OpenTelemetryCollector"
+echo "  metadata:"
+echo "    name: otel-collector"
+echo "    namespace: ${NAMESPACE}"
+echo "  spec:"
+echo "    config: |"
+echo "      receivers:"
+echo "        otlp:"
+echo "          protocols:"
+echo "            grpc:"
+echo "              endpoint: 0.0.0.0:4317"
+echo "      exporters:"
+echo "        prometheusremotewrite:"
+echo "          endpoint: http://prometheus-kube-prometheus-prometheus.${NAMESPACE}.svc.cluster.local:9090/api/v1/write"
+echo "      service:"
+echo "        pipelines:"
+echo "          metrics:"
+echo "            receivers: [otlp]"
+echo "            exporters: [prometheusremotewrite]"
+echo "    mode: deployment"
+echo "    replicas: 1"
+echo "  EOF"
+echo ""
+echo "Once OpenTelemetryCollector is created, configure your application with:"
 echo "  OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector.${NAMESPACE}.svc.cluster.local:4317"
 echo "  OTEL_SERVICE_NAME=your-service-name"
 echo ""

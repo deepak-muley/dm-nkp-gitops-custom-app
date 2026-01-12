@@ -190,74 +190,251 @@ fi
 # Step 7: Deploy observability stack (OTel Collector, Prometheus, Loki, Tempo, Grafana)
 echo ""
 echo_step "Step 7: Deploying OpenTelemetry observability stack..."
+OTEL_DEPLOYED=false
 if [ -f "scripts/setup-observability-stack.sh" ]; then
-    if bash scripts/setup-observability-stack.sh >/dev/null 2>&1; then
+    echo "Using scripts/setup-observability-stack.sh..."
+    if bash scripts/setup-observability-stack.sh; then
         echo_info "Observability stack deployed"
+        OTEL_DEPLOYED=true
     else
-        echo_warn "Observability stack deployment had issues, continuing..."
+        echo_warn "setup-observability-stack.sh failed, trying manual deployment..."
+        OTEL_DEPLOYED=false
     fi
-else
-    echo_warn "setup-observability-stack.sh not found, deploying manually..."
+fi
+
+# If setup script failed or doesn't exist, deploy manually
+if [ "$OTEL_DEPLOYED" = "false" ]; then
+    echo_warn "Deploying observability stack manually..."
     
     # Create namespace
-    kubectl create namespace $OBSERVABILITY_NAMESPACE --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
+    kubectl create namespace $OBSERVABILITY_NAMESPACE --dry-run=client -o yaml | kubectl apply -f - || true
     
     # Add Helm repos
-    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
-    helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
-    helm repo update >/dev/null 2>&1 || true
+    echo "Adding Helm repositories..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
+    helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
+    helm repo update || echo_warn "Helm repo update had issues, continuing..."
     
     # Install Prometheus + Grafana
-    helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+    echo "Installing Prometheus and Grafana..."
+    # Handle CRD version mismatch by automatically uninstalling and reinstalling if needed
+    INSTALL_ERROR_FILE="/tmp/prometheus-install-$$.log"
+    if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
       --namespace $OBSERVABILITY_NAMESPACE \
+      --create-namespace \
       --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
       --set prometheus.prometheusSpec.retention=1h \
       --set grafana.adminPassword=admin \
-      --wait --timeout=5m >/dev/null 2>&1 || echo_warn "Prometheus installation had issues"
+      --wait --timeout=5m 2>&1 | tee "$INSTALL_ERROR_FILE"; then
+        echo_info "Prometheus and Grafana installed successfully"
+        rm -f "$INSTALL_ERROR_FILE"
+    else
+        INSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
+        if echo "$INSTALL_ERROR" | grep -q "field not declared in schema"; then
+            echo_warn "Upgrade failed due to CRD schema mismatch (ServiceMonitor CRD version incompatibility)"
+            echo_warn "Automatically uninstalling and reinstalling to fix CRD version mismatch..."
+            helm uninstall prometheus -n $OBSERVABILITY_NAMESPACE 2>/dev/null || true
+            sleep 5
+            # Reinstall with fresh CRDs
+            if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+              --namespace $OBSERVABILITY_NAMESPACE \
+              --create-namespace \
+              --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+              --set prometheus.prometheusSpec.retention=1h \
+              --set grafana.adminPassword=admin \
+              --wait --timeout=5m; then
+                echo_info "Prometheus reinstalled successfully after CRD fix"
+            else
+                echo_warn "Prometheus reinstallation had issues, continuing..."
+            fi
+        else
+            echo_warn "Prometheus installation had issues: $(echo "$INSTALL_ERROR" | head -3)"
+        fi
+        rm -f "$INSTALL_ERROR_FILE"
+    fi
     
-    # Install Loki
-    helm upgrade --install loki grafana/loki \
+    # Install Loki (using loki-simple-scalable for single-node kind clusters)
+    echo "Installing Loki..."
+    # Note: grafana/loki and loki-stack are deprecated
+    # Using loki-simple-scalable for local/testing clusters (simpler, single binary, no anti-affinity)
+    # For production multi-node clusters, consider loki-distributed instead
+    if helm upgrade --install loki grafana/loki-simple-scalable \
       --namespace $OBSERVABILITY_NAMESPACE \
-      --wait --timeout=5m >/dev/null 2>&1 || echo_warn "Loki installation had issues"
+      --set singleBinary.replicas=1 \
+      --wait --timeout=5m; then
+        echo_info "Loki installed successfully (using loki-simple-scalable)"
+    else
+        echo_warn "Loki-simple-scalable installation had issues, trying loki-distributed with anti-affinity disabled..."
+        # Fallback: try loki-distributed with anti-affinity disabled for single-node clusters
+        if helm upgrade --install loki grafana/loki-distributed \
+          --namespace $OBSERVABILITY_NAMESPACE \
+          --set loki.read.replicas=1 \
+          --set loki.write.replicas=1 \
+          --set loki.read.affinity='' \
+          --set loki.write.affinity='' \
+          --set loki.backend.affinity='' \
+          --wait --timeout=5m; then
+            echo_info "Loki installed successfully (using loki-distributed with anti-affinity disabled)"
+        else
+            echo_warn "Loki installation failed, continuing..."
+        fi
+    fi
     
     # Install Tempo
-    helm upgrade --install tempo grafana/tempo \
+    echo "Installing Tempo..."
+    if helm upgrade --install tempo grafana/tempo \
       --namespace $OBSERVABILITY_NAMESPACE \
       --set serviceAccount.create=true \
-      --wait --timeout=5m >/dev/null 2>&1 || echo_warn "Tempo installation had issues"
+      --wait --timeout=5m; then
+        echo_info "Tempo installed successfully"
+    else
+        echo_warn "Tempo installation had issues, continuing..."
+    fi
     
-    # Install OTel Collector (from local chart if available)
-    if [ -f "chart/observability-stack/Chart.yaml" ]; then
-        echo "Installing OTel Collector from local chart..."
-        set +e  # Temporarily disable exit on error for helm command
-        if helm upgrade --install otel-collector chart/observability-stack \
-          --namespace $OBSERVABILITY_NAMESPACE \
+    # Install cert-manager (required by OTel Operator for webhook certificates)
+    echo "Installing cert-manager (required by OTel Operator)..."
+    helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
+    helm repo update || true
+    
+    if helm list -n cert-manager 2>/dev/null | grep -q cert-manager; then
+        echo_info "cert-manager already installed"
+    else
+        echo "Installing cert-manager..."
+        if helm upgrade --install cert-manager jetstack/cert-manager \
+          --namespace cert-manager \
           --create-namespace \
-          --set otel-collector.enabled=true \
-          --wait --timeout=5m >/dev/null 2>&1; then
-            set -e  # Re-enable exit on error
-            echo_info "OTel Collector installed successfully"
+          --set installCRDs=true \
+          --wait --timeout=5m; then
+            echo_info "cert-manager installed successfully"
+            # Wait for cert-manager webhook to be ready
+            echo "Waiting for cert-manager webhook to be ready..."
+            kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=3m 2>/dev/null || echo_warn "cert-manager webhook may not be ready yet"
         else
-            set -e  # Re-enable exit on error
-            echo_warn "OTel Collector installation from local chart failed, trying upstream chart..."
-            helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
-            helm repo update >/dev/null 2>&1 || true
-            set +e  # Temporarily disable exit on error
-            helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
-              --namespace $OBSERVABILITY_NAMESPACE \
-              --wait --timeout=5m >/dev/null 2>&1 || echo_warn "OTel Collector installation had issues"
-            set -e  # Re-enable exit on error
+            echo_warn "cert-manager installation failed"
+            echo_warn "OTel Operator requires cert-manager. Please install manually:"
+            echo_warn "  helm repo add jetstack https://charts.jetstack.io"
+            echo_warn "  helm repo update"
+            echo_warn "  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
+        fi
+    fi
+    
+    # Install OTel Operator using Helm chart (preferred approach for platform)
+    echo "Installing OTel Operator using Helm chart..."
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
+    helm repo update || true
+    
+    echo "Checking if OTel Operator is already installed..."
+    if helm list -n opentelemetry-operator-system 2>/dev/null | grep -q opentelemetry-operator; then
+        echo_info "OTel Operator Helm release already exists, checking if operator is running..."
+        if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
+            echo_info "OTel Operator is already installed and running"
+            OTEL_DEPLOYED=true
+        else
+            echo_warn "OTel Operator Helm release exists but operator pods are not running"
+            echo "Upgrading OTel Operator..."
+            if helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+              --namespace opentelemetry-operator-system \
+              --create-namespace \
+              --set manager.collectorImage.repository=otel/opentelemetry-collector-contrib \
+              --wait --timeout=5m; then
+                echo_info "OTel Operator upgraded successfully"
+                OTEL_DEPLOYED=true
+            else
+                echo_error "OTel Operator upgrade failed"
+                OTEL_DEPLOYED=false
+            fi
         fi
     else
-        echo_warn "Local OTel Collector chart not found, installing from upstream..."
-        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
-        helm repo update >/dev/null 2>&1 || true
+        echo "Installing OTel Operator via Helm..."
+        if helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+          --namespace opentelemetry-operator-system \
+          --create-namespace \
+          --set manager.collectorImage.repository=otel/opentelemetry-collector-contrib \
+          --wait --timeout=5m; then
+            echo_info "OTel Operator installed successfully via Helm"
+            OTEL_DEPLOYED=true
+        else
+            echo_error "OTel Operator installation failed"
+            echo_warn "OTel Operator is required for metrics and traces. Please install manually."
+            OTEL_DEPLOYED=false
+        fi
+    fi
+    
+    # Wait for OTel Operator to be ready
+    if [ "$OTEL_DEPLOYED" = "true" ]; then
+        echo "Waiting for OTel Operator to be ready..."
         set +e  # Temporarily disable exit on error
-        helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
-          --namespace $OBSERVABILITY_NAMESPACE \
-          --wait --timeout=5m >/dev/null 2>&1 || echo_warn "OTel Collector installation had issues"
+        if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=opentelemetry-operator -n opentelemetry-operator-system --timeout=3m 2>/dev/null; then
+            echo_info "OTel Operator is ready"
+        else
+            echo_warn "OTel Operator may not be fully ready yet, continuing..."
+        fi
         set -e  # Re-enable exit on error
+        
+        # Create OpenTelemetryCollector instance if it doesn't exist
+        echo "Checking for OpenTelemetryCollector instance..."
+        if kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -v NAME | grep -q .; then
+            echo_info "OpenTelemetryCollector instance already exists"
+            kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null
+        else
+            echo "Creating OpenTelemetryCollector instance..."
+            cat <<EOF | kubectl apply -f -
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  namespace: ${OBSERVABILITY_NAMESPACE}
+spec:
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+      resource:
+        attributes:
+          - key: service.name
+            value: otel-collector
+            action: upsert
+    exporters:
+      prometheusremotewrite:
+        endpoint: http://prometheus-kube-prometheus-prometheus.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:9090/api/v1/write
+      logging:
+        loglevel: info
+      otlp/tempo:
+        endpoint: tempo.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [prometheusremotewrite]
+        logs:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [logging]
+  mode: deployment
+  replicas: 1
+EOF
+            if [ $? -eq 0 ]; then
+                echo_info "OpenTelemetryCollector instance created successfully"
+                echo "Waiting for OpenTelemetryCollector to be ready..."
+                sleep 5
+            else
+                echo_warn "Failed to create OpenTelemetryCollector instance, you may need to create it manually"
+            fi
+        fi
     fi
 fi
 
@@ -311,16 +488,89 @@ else
     echo_warn "Grafana may not be ready yet"
 fi
 
-# Verify OTel Collector service exists
-if kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -q otel-collector; then
-    echo_info "OTel Collector service exists"
-    kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep otel-collector || true
-else
-    echo_warn "OTel Collector service not found. This may cause issues with telemetry export."
+# Verify OTel Collector or Operator deployment
+echo ""
+echo_step "Verifying OTel deployment..."
+OTEL_VERIFIED=false
+OTEL_TYPE=""
+
+# Check if OTel Operator is installed (uses OpenTelemetryCollector CRD)
+if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
+    echo_info "OTel Operator detected (OpenTelemetryCollector CRD exists)"
+    OTEL_TYPE="operator"
+    # Check if OTel Operator is running (in opentelemetry-operator-system namespace)
+    if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
+        echo_info "OTel Operator pods are running"
+        kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep Running || true
+        # Check if OpenTelemetryCollector instance exists
+        if kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -v NAME | grep -q .; then
+            echo_info "OpenTelemetryCollector instance(s) found"
+            kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null
+            # Check if collector pods are running (managed by operator)
+            if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
+                echo_info "OpenTelemetryCollector pods are running (managed by operator)"
+                kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
+                OTEL_VERIFIED=true
+            else
+                echo_warn "OpenTelemetryCollector CR exists but pods are not running yet"
+            fi
+        else
+            echo_warn "OTel Operator is installed but no OpenTelemetryCollector instance found"
+            echo_warn "You need to create an OpenTelemetryCollector custom resource"
+        fi
+    else
+        echo_warn "OTel Operator CRD exists but operator pods are not running"
+    fi
 fi
+
+# Note: We only check for OTel Operator now (not direct Collector Helm chart)
+# OTel Collector instances are managed by the Operator via OpenTelemetryCollector CR
+# Check if OpenTelemetryCollector pods are running (created by operator)
+if [ "$OTEL_VERIFIED" = "false" ]; then
+    if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
+        echo_info "OpenTelemetryCollector pods are running (managed by operator)"
+        kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
+        OTEL_VERIFIED=true
+    fi
+fi
+
+# Final check: Look for any OTel-related pods/services
+if [ "$OTEL_VERIFIED" = "false" ]; then
+    echo ""
+    echo_error "OTel Collector/Operator not found or not ready!"
+    echo_warn "This will cause issues with telemetry export (metrics and traces will not work)."
+    echo_warn "The application will still run, but metrics/traces export will fail."
+    echo ""
+    echo "Checking for any OTel-related resources..."
+    kubectl get pods -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel pods found"
+    kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel services found"
+    kubectl get deployment -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel deployments found"
+    kubectl get statefulset -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel statefulsets found"
+fi
+
 set -e  # Re-enable exit on error
 
-echo_info "Observability stack wait completed. Proceeding to Gateway API deployment..."
+if [ "$OTEL_VERIFIED" = "false" ]; then
+    echo ""
+    echo_warn "⚠️  WARNING: OTel Collector/Operator is not deployed or not ready"
+    echo_warn "   Metrics and traces will not work until OTel Collector is deployed."
+    echo_warn "   Deployment options:"
+    echo_warn ""
+    echo_warn "   Deploy cert-manager first (required by OTel Operator):"
+    echo_warn "     helm repo add jetstack https://charts.jetstack.io"
+    echo_warn "     helm repo update"
+    echo_warn "     helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
+    echo_warn "   Deploy OTel Operator (Helm chart - recommended):"
+    echo_warn "     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts"
+    echo_warn "     helm repo update"
+    echo_warn "     helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \\"
+    echo_warn "       --namespace opentelemetry-operator-system --create-namespace"
+    echo_warn "     # Then create an OpenTelemetryCollector custom resource"
+    echo_warn ""
+    echo_warn "   Continuing with deployment, but telemetry export will fail..."
+fi
+
+echo_info "Observability stack deployment completed. Proceeding to Gateway API deployment..."
 
 # Step 8: Deploy Gateway API + Traefik with Gateway API support
 echo ""
