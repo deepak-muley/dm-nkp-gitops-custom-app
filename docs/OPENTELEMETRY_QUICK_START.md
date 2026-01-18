@@ -5,12 +5,14 @@ This guide provides a quick start to using OpenTelemetry with this application.
 ## What Changed?
 
 ### Before (Prometheus Direct)
+
 - Application exported Prometheus metrics directly
 - Separate metrics port (9090) with `/metrics` endpoint
 - Prometheus scraped the application directly
 - No tracing or structured logging
 
 ### After (OpenTelemetry)
+
 - Application uses OpenTelemetry SDK for metrics, logs, and traces
 - Single OTLP endpoint sends all telemetry to OTel Collector
 - Collector forwards to Prometheus (metrics), Loki (logs), Tempo (traces)
@@ -21,15 +23,20 @@ This guide provides a quick start to using OpenTelemetry with this application.
 ### 1. Set Up Observability Stack
 
 ```bash
+# Recommended: Full E2E demo with everything configured
+./scripts/e2e-demo-otel.sh
+
+# Or manually deploy the observability stack
 ./scripts/setup-observability-stack.sh
 ```
 
 This installs:
-- OpenTelemetry Collector
-- Prometheus (via kube-prometheus-stack)
-- Grafana Loki
-- Grafana Tempo
-- Grafana (visualization)
+
+- OpenTelemetry Collector (receives OTLP metrics, logs, traces)
+- Prometheus (via kube-prometheus-stack) - metrics storage
+- Loki 3.0+ (logs storage with native OTLP support)
+- Tempo (distributed tracing)
+- Grafana (visualization with pre-configured dashboards)
 
 ### 2. Deploy Application
 
@@ -45,15 +52,18 @@ helm upgrade --install dm-nkp-gitops-custom-app ./chart/dm-nkp-gitops-custom-app
 kubectl port-forward -n observability svc/prometheus-grafana 3000:80
 ```
 
-Visit: http://localhost:3000
+Visit: <http://localhost:3000>
+
 - Username: `admin`
 - Password: `admin`
 
 ### 4. Configure Data Sources in Grafana
 
+Data sources are auto-configured when using `e2e-demo-otel.sh`. If configuring manually:
+
 1. Go to Configuration → Data Sources
-2. Add Prometheus: `http://prometheus-server:80`
-3. Add Loki: `http://loki:3100`
+2. Add Prometheus: `http://prometheus-kube-prometheus-prometheus:9090`
+3. Add Loki: `http://loki-gateway:80` (Loki 3.0+ with OTLP support)
 4. Add Tempo: `http://tempo:3200`
 
 ### 5. Generate Test Traffic
@@ -113,17 +123,17 @@ OTEL_RESOURCE_ATTRIBUTES=service.name=dm-nkp-gitops-custom-app,service.version=0
 
 ```bash
 # Check application logs
-kubectl logs deployment/dm-nkp-gitops-custom-app | grep -i otel
+kubectl logs -n default deployment/dm-nkp-gitops-custom-app | grep -i otel
 
 # Check OTel Collector logs
-kubectl logs -n observability deployment/otel-collector
+kubectl logs -n observability -l app.kubernetes.io/managed-by=opentelemetry-operator --tail=50
 ```
 
 ### Verify OTel Collector is reachable
 
 ```bash
 # From application pod
-kubectl exec -it deployment/dm-nkp-gitops-custom-app -- nc -zv otel-collector 4317
+kubectl exec -it -n default deployment/dm-nkp-gitops-custom-app -- nc -zv otel-collector.observability 4317
 ```
 
 ### Check Prometheus targets
@@ -133,9 +143,31 @@ kubectl port-forward -n observability svc/prometheus-kube-prometheus-prometheus 
 # Visit http://localhost:9090/targets
 ```
 
+### Check Loki logs
+
+```bash
+kubectl port-forward -n observability svc/loki-gateway 3100:80
+# Check labels: curl http://localhost:3100/loki/api/v1/labels
+# Query logs: curl -G http://localhost:3100/loki/api/v1/query --data-urlencode 'query={service_name="dm-nkp-gitops-custom-app"}'
+```
+
+### Check Tempo traces
+
+```bash
+kubectl port-forward -n observability svc/tempo 3200:3200
+# Search traces: curl http://localhost:3200/api/search?limit=5
+```
+
+### Run debug script
+
+```bash
+./scripts/debug-logs-traces.sh
+```
+
 ## Backup
 
 Original Prometheus code is backed up in:
+
 - `internal/metrics/prometheus_backup/`
 
 ## Full Documentation

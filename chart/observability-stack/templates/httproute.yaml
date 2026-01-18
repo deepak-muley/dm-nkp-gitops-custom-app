@@ -1,0 +1,104 @@
+{{- if .Values.gateway.enabled }}
+# HTTPRoute for Observability Stack Services (Path-based Routing)
+# All services accessible via same external entrypoint with different paths
+# MetalLB should already be present in NKP platform (no need to install)
+# Gateway API CRDs must be installed (from Mesosphere Kommander: gateway-api-crds/1.11.1)
+# Gateway resource must exist (from Traefik: traefik/37.1.2)
+# Compatible with Gateway API CRDs v1.11.1 (uses API version gateway.networking.k8s.io/v1)
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-observability
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+    component: gateway-route
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.parentRef.name }}
+      namespace: {{ .Values.gateway.parentRef.namespace | default "traefik-system" }}
+  hostnames:
+    - {{ .Values.gateway.hostname | quote }}
+  rules:
+    {{- if .Values.grafana.enabled }}
+    # Grafana route - /grafana path
+    # Note: Grafana requires root_url configuration: grafana.ini [server] root_url = "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gateway.services.grafana.path }}
+      backendRefs:
+        - name: {{ .Values.gateway.services.grafana.name }}
+          port: {{ .Values.gateway.services.grafana.port }}
+          {{- if .Values.gateway.services.grafana.namespace }}
+          namespace: {{ .Values.gateway.services.grafana.namespace }}
+          {{- end }}
+          weight: 100
+    {{- end }}
+    
+    {{- if .Values.prometheus.enabled }}
+    # Prometheus route - /prometheus path
+    # Note: Prometheus may need --web.external-url=/prometheus/ flag for subpath support
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gateway.services.prometheus.path }}
+      backendRefs:
+        - name: {{ .Values.gateway.services.prometheus.name }}
+          port: {{ .Values.gateway.services.prometheus.port }}
+          {{- if .Values.gateway.services.prometheus.namespace }}
+          namespace: {{ .Values.gateway.services.prometheus.namespace }}
+          {{- end }}
+          weight: 100
+    {{- end }}
+    
+    {{- if .Values.loki.enabled }}
+    # Loki route - /loki path
+    # Loki Gateway typically supports subpath routing
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gateway.services.loki.path }}
+      backendRefs:
+        - name: {{ .Values.gateway.services.loki.name }}
+          port: {{ .Values.gateway.services.loki.port }}
+          {{- if .Values.gateway.services.loki.namespace }}
+          namespace: {{ .Values.gateway.services.loki.namespace }}
+          {{- end }}
+          weight: 100
+    {{- end }}
+    
+    {{- if .Values.tempo.enabled }}
+    # Tempo route - /tempo path
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gateway.services.tempo.path }}
+      backendRefs:
+        - name: {{ .Values.gateway.services.tempo.name }}
+          port: {{ .Values.gateway.services.tempo.port }}
+          {{- if .Values.gateway.services.tempo.namespace }}
+          namespace: {{ .Values.gateway.services.tempo.namespace }}
+          {{- end }}
+          weight: 100
+    {{- end }}
+    
+    {{- if and .Values.otel-collector.enabled .Values.gateway.services.otelCollector.enabled }}
+    # OTel Collector route - /otel-collector path
+    # Note: OTel Collector endpoints:
+    #   - /otel-collector/ (root) - health check
+    #   - /otel-collector/v1/traces - traces ingestion
+    #   - /otel-collector/v1/metrics - metrics ingestion
+    #   - /otel-collector/v1/logs - logs ingestion
+    #   - /otel-collector/metrics - Prometheus metrics endpoint
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gateway.services.otelCollector.path }}
+      backendRefs:
+        - name: {{ include "observability-stack.fullname" . }}-otel-collector
+          port: {{ .Values.otel-collector.service.ports.otlp-http }}
+          weight: 100
+    {{- end }}
+{{- end }}

@@ -1,0 +1,66 @@
+{{- if and .Values.gateway.enabled .Values.gateway.create }}
+# Gateway Resource with HTTP and HTTPS Listeners
+# ⚠️ LOCAL TESTING ONLY
+#
+# In NKP production, Gateway is pre-deployed by the platform team (Traefik)
+# This template is for local development environments (kind, minikube)
+#
+# Prerequisites:
+#   - Gateway API CRDs installed
+#   - Traefik with Gateway API support
+#   - MetalLB for LoadBalancer IP (local testing)
+#   - cert-manager for TLS certificates
+#
+# Verify Gateway status:
+#   kubectl get gateway -n {{ .Values.gateway.parentRef.namespace }}
+#   kubectl describe gateway {{ .Values.gateway.parentRef.name }} -n {{ .Values.gateway.parentRef.namespace }}
+---
+# GatewayClass (Traefik usually creates this, but included for completeness)
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gateway.gatewayClassName }}
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+# Gateway with HTTP and HTTPS listeners
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.parentRef.name }}
+  namespace: {{ .Values.gateway.parentRef.namespace }}
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+  {{- if .Values.tls.enabled }}
+  annotations:
+    # cert-manager annotation for automatic certificate management
+    cert-manager.io/cluster-issuer: {{ .Values.tls.certificate.issuerRef.name | quote }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gateway.gatewayClassName }}
+  listeners:
+    # HTTP listener - port 80
+    - name: web
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- if .Values.tls.enabled }}
+    # HTTPS listener - port 443 (only if TLS is enabled)
+    - name: websecure
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate  # TLS termination at Gateway
+        certificateRefs:
+          - name: {{ .Values.tls.certificate.secretName }}
+            kind: Secret
+            namespace: {{ .Release.Namespace }}
+    {{- end }}
+{{- end }}

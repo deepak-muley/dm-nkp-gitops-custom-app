@@ -33,9 +33,29 @@ echo_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+# Cross-platform timeout wrapper
+# Uses system timeout if available, otherwise relies on kubectl's own timeout parameter
+run_with_timeout() {
+    local timeout_sec=$1
+    shift
+
+    # Check if timeout command exists (Linux) or gtimeout (macOS with coreutils)
+    if command -v timeout >/dev/null 2>&1; then
+        timeout $timeout_sec "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout $timeout_sec "$@"
+    else
+        # On macOS without timeout: kubectl wait already has --timeout parameter
+        # Just run the command directly - kubectl will handle its own timeout
+        "$@"
+    fi
+}
+
 cleanup() {
     echo ""
     echo_warn "Cleaning up..."
+    # Kill any background port forwards
+    pkill -f "kubectl port-forward" 2>/dev/null || true
     # Note: We keep the cluster running for inspection
     # To fully cleanup: kind delete cluster --name $CLUSTER_NAME
     echo "Note: Kind cluster '$CLUSTER_NAME' is kept for inspection"
@@ -85,7 +105,7 @@ else
         echo "Untracked Go files detected:"
         echo "$UNTRACKED_GO_FILES" | sed "s/^/  - /"
     fi
-    
+
     make clean >/dev/null 2>&1 || true
     if make deps && make build; then
         echo_info "Application built successfully"
@@ -162,7 +182,14 @@ fi
 # Step 5: Create/check kind cluster
 echo ""
 echo_step "Step 5: Setting up kind cluster..."
-if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+set +e  # Temporarily disable exit on error for cluster check
+CLUSTER_EXISTS=false
+if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+    CLUSTER_EXISTS=true
+fi
+set -e  # Re-enable exit on error
+
+if [ "$CLUSTER_EXISTS" = "true" ]; then
     echo_info "Cluster '$CLUSTER_NAME' already exists"
 else
     echo "Creating kind cluster..."
@@ -170,6 +197,8 @@ else
         echo_info "Kind cluster created"
     else
         echo_error "Failed to create cluster"
+        echo_warn "This may be due to Docker permissions. Please ensure Docker is running and accessible."
+        echo_warn "You can check with: docker ps"
         exit 1
     fi
 fi
@@ -180,124 +209,433 @@ kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null 2>&1 || true
 # Step 6: Load image into kind
 echo ""
 echo_step "Step 6: Loading image into kind cluster..."
+set +e  # Temporarily disable exit on error
 if kind load docker-image $IMAGE_NAME --name $CLUSTER_NAME >/dev/null 2>&1; then
     echo_info "Image loaded into kind"
 else
-    echo_error "Failed to load image"
-    exit 1
+    echo_warn "Failed to load image (may already be loaded or image doesn't exist)"
+    echo_warn "Checking if image exists locally..."
+    if docker images | grep -q "${IMAGE_NAME%:*}"; then
+        echo_info "Image exists locally, attempting to load again..."
+        kind load docker-image $IMAGE_NAME --name $CLUSTER_NAME 2>&1 || echo_warn "Image load failed, but continuing (may already be in cluster)"
+    else
+        echo_warn "Image not found locally. If build was skipped, this is expected."
+        echo_warn "Continuing - existing image in cluster will be used if available"
+    fi
 fi
+set -e  # Re-enable exit on error
 
 # Step 7: Deploy observability stack (OTel Collector, Prometheus, Loki, Tempo, Grafana)
 echo ""
 echo_step "Step 7: Deploying OpenTelemetry observability stack..."
+
+# Check if observability stack is already installed
+OBSERVABILITY_INSTALLED=false
+if helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -qE "prometheus|loki|tempo"; then
+    echo_info "Observability stack charts already installed, checking status..."
+    OBSERVABILITY_INSTALLED=true
+fi
+
 OTEL_DEPLOYED=false
-if [ -f "scripts/setup-observability-stack.sh" ]; then
+if [ "$OBSERVABILITY_INSTALLED" = "false" ] && [ -f "scripts/setup-observability-stack.sh" ]; then
     echo "Using scripts/setup-observability-stack.sh..."
     if bash scripts/setup-observability-stack.sh; then
         echo_info "Observability stack deployed"
         OTEL_DEPLOYED=true
     else
-        echo_warn "setup-observability-stack.sh failed, trying manual deployment..."
-        OTEL_DEPLOYED=false
+        echo_warn "setup-observability-stack.sh failed, checking what was installed..."
+        # Check what got installed before the failure
+        if helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -qE "prometheus|loki|tempo"; then
+            echo_info "Some observability charts were installed, will skip manual installation to avoid duplicates"
+            OTEL_DEPLOYED=true
+        else
+            echo_warn "No observability charts found, will try manual deployment..."
+            OTEL_DEPLOYED=false
+        fi
+    fi
+elif [ "$OBSERVABILITY_INSTALLED" = "true" ]; then
+    echo_info "Observability stack already installed, skipping setup script"
+    OTEL_DEPLOYED=true
+    # Still need to ensure OTel Operator and Collector CR exist
+    echo "Checking OTel Operator status..."
+    if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
+        echo_info "OTel Operator CRD exists"
+    else
+        echo_warn "OTel Operator CRD not found, OTel Operator may not be installed"
     fi
 fi
 
-# If setup script failed or doesn't exist, deploy manually
+# If setup script failed or doesn't exist, deploy manually (only if charts are not already installed)
 if [ "$OTEL_DEPLOYED" = "false" ]; then
     echo_warn "Deploying observability stack manually..."
-    
+
     # Create namespace
     kubectl create namespace $OBSERVABILITY_NAMESPACE --dry-run=client -o yaml | kubectl apply -f - || true
-    
+
     # Add Helm repos
     echo "Adding Helm repositories..."
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
     helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
+    helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
     helm repo update || echo_warn "Helm repo update had issues, continuing..."
-    
+
     # Install Prometheus + Grafana
-    echo "Installing Prometheus and Grafana..."
-    # Handle CRD version mismatch by automatically uninstalling and reinstalling if needed
-    INSTALL_ERROR_FILE="/tmp/prometheus-install-$$.log"
-    if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+    # Check if Prometheus is already installed
+    if helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -q "^prometheus[[:space:]]"; then
+        echo_info "Prometheus already installed, skipping installation"
+    else
+        echo "Installing Prometheus and Grafana..."
+        # Handle CRD version mismatch by automatically uninstalling and reinstalling if needed
+        INSTALL_ERROR_FILE="/tmp/prometheus-install-$$.log"
+        if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
       --namespace $OBSERVABILITY_NAMESPACE \
       --create-namespace \
       --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
       --set prometheus.prometheusSpec.retention=1h \
       --set grafana.adminPassword=admin \
-      --wait --timeout=5m 2>&1 | tee "$INSTALL_ERROR_FILE"; then
+      --set grafana.sidecar.datasources.enabled=true \
+      --set grafana.sidecar.datasources.searchNamespace=ALL \
+      --set grafana.sidecar.dashboards.enabled=true \
+      --set grafana.sidecar.dashboards.searchNamespace=ALL \
+      --wait --timeout=2m 2>&1 | tee "$INSTALL_ERROR_FILE"; then
         echo_info "Prometheus and Grafana installed successfully"
         rm -f "$INSTALL_ERROR_FILE"
     else
         INSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
         if echo "$INSTALL_ERROR" | grep -q "field not declared in schema"; then
             echo_warn "Upgrade failed due to CRD schema mismatch (ServiceMonitor CRD version incompatibility)"
-            echo_warn "Automatically uninstalling and reinstalling to fix CRD version mismatch..."
+            echo_warn "Automatically uninstalling and cleaning up CRDs to fix version mismatch..."
             helm uninstall prometheus -n $OBSERVABILITY_NAMESPACE 2>/dev/null || true
+            sleep 3
+            # Delete problematic ServiceMonitor resources that might have incompatible fields
+            echo_warn "Cleaning up ServiceMonitor resources with incompatible schema..."
+            kubectl delete servicemonitor -n $OBSERVABILITY_NAMESPACE --all --ignore-not-found=true 2>/dev/null || true
+            kubectl delete prometheusrule -n $OBSERVABILITY_NAMESPACE --all --ignore-not-found=true 2>/dev/null || true
+            # Wait for resources to be fully deleted
             sleep 5
-            # Reinstall with fresh CRDs
+            # Reinstall with fresh CRDs (Helm will install updated CRDs)
+            echo_warn "Reinstalling Prometheus with fresh CRDs..."
             if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
               --namespace $OBSERVABILITY_NAMESPACE \
               --create-namespace \
               --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
               --set prometheus.prometheusSpec.retention=1h \
               --set grafana.adminPassword=admin \
-              --wait --timeout=5m; then
+              --set grafana.sidecar.datasources.enabled=true \
+              --set grafana.sidecar.datasources.searchNamespace=ALL \
+              --set grafana.sidecar.dashboards.enabled=true \
+              --set grafana.sidecar.dashboards.searchNamespace=ALL \
+              --wait --timeout=2m 2>&1 | tee "$INSTALL_ERROR_FILE"; then
                 echo_info "Prometheus reinstalled successfully after CRD fix"
+                rm -f "$INSTALL_ERROR_FILE"
             else
-                echo_warn "Prometheus reinstallation had issues, continuing..."
+                REINSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
+                if echo "$REINSTALL_ERROR" | grep -q "field not declared in schema"; then
+                    echo_warn "Still seeing CRD schema issues. Deleting CRDs and retrying..."
+                    # Delete the CRDs themselves if they're still causing issues
+                    kubectl delete crd servicemonitors.monitoring.coreos.com --ignore-not-found=true 2>/dev/null || true
+                    kubectl delete crd prometheusrules.monitoring.coreos.com --ignore-not-found=true 2>/dev/null || true
+                    sleep 5
+                    # Final reinstall - Helm will install fresh CRDs
+                    if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                      --namespace $OBSERVABILITY_NAMESPACE \
+                      --create-namespace \
+                      --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+                      --set prometheus.prometheusSpec.retention=1h \
+                      --set grafana.adminPassword=admin \
+                      --set grafana.sidecar.datasources.enabled=true \
+                      --set grafana.sidecar.datasources.searchNamespace=ALL \
+                      --set grafana.sidecar.dashboards.enabled=true \
+                      --set grafana.sidecar.dashboards.searchNamespace=ALL \
+                      --wait --timeout=5m; then
+                        echo_info "Prometheus reinstalled successfully after CRD deletion"
+                    else
+                        echo_warn "Prometheus reinstallation still had issues, continuing..."
+                    fi
+                else
+                    echo_warn "Prometheus reinstallation had issues: $(echo "$REINSTALL_ERROR" | head -3)"
+                fi
+                rm -f "$INSTALL_ERROR_FILE"
             fi
         else
             echo_warn "Prometheus installation had issues: $(echo "$INSTALL_ERROR" | head -3)"
         fi
         rm -f "$INSTALL_ERROR_FILE"
-    fi
-    
-    # Install Loki (using loki-simple-scalable for single-node kind clusters)
-    echo "Installing Loki..."
-    # Note: grafana/loki and loki-stack are deprecated
-    # Using loki-simple-scalable for local/testing clusters (simpler, single binary, no anti-affinity)
-    # For production multi-node clusters, consider loki-distributed instead
-    if helm upgrade --install loki grafana/loki-simple-scalable \
-      --namespace $OBSERVABILITY_NAMESPACE \
-      --set singleBinary.replicas=1 \
-      --wait --timeout=5m; then
-        echo_info "Loki installed successfully (using loki-simple-scalable)"
-    else
-        echo_warn "Loki-simple-scalable installation had issues, trying loki-distributed with anti-affinity disabled..."
-        # Fallback: try loki-distributed with anti-affinity disabled for single-node clusters
-        if helm upgrade --install loki grafana/loki-distributed \
-          --namespace $OBSERVABILITY_NAMESPACE \
-          --set loki.read.replicas=1 \
-          --set loki.write.replicas=1 \
-          --set loki.read.affinity='' \
-          --set loki.write.affinity='' \
-          --set loki.backend.affinity='' \
-          --wait --timeout=5m; then
-            echo_info "Loki installed successfully (using loki-distributed with anti-affinity disabled)"
-        else
-            echo_warn "Loki installation failed, continuing..."
         fi
     fi
-    
-    # Install Tempo
-    echo "Installing Tempo..."
-    if helm upgrade --install tempo grafana/tempo \
-      --namespace $OBSERVABILITY_NAMESPACE \
-      --set serviceAccount.create=true \
-      --wait --timeout=5m; then
-        echo_info "Tempo installed successfully"
-    else
-        echo_warn "Tempo installation had issues, continuing..."
+
+    # Install Loki 3.0+ (using grafana/loki chart with monolithic mode for single-node kind clusters)
+    # Loki 3.0+ supports native OTLP ingestion which is required for OTel Collector logs
+    # Check if Loki is already installed
+    if helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -q "^loki[[:space:]]"; then
+        echo_info "Loki already installed, checking version..."
+        LOKI_VERSION=$(helm list -n $OBSERVABILITY_NAMESPACE -o json 2>/dev/null | jq -r '.[] | select(.name=="loki") | .app_version' || echo "unknown")
+        echo_info "Current Loki version: $LOKI_VERSION"
+        # Check if it's Loki 3.0+ (needed for OTLP support)
+        if [[ "$LOKI_VERSION" =~ ^[0-2]\. ]] && [[ ! "$LOKI_VERSION" =~ ^3\. ]]; then
+            echo_warn "Loki version is older than 3.0, upgrading for OTLP support..."
+            helm uninstall loki -n $OBSERVABILITY_NAMESPACE --wait 2>/dev/null || true
+            sleep 5
+        else
+            echo_info "Loki 3.0+ already installed, skipping upgrade"
+        fi
     fi
-    
+
+    # Install/upgrade Loki 3.0+ with OTLP support
+    if ! helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -q "^loki[[:space:]]"; then
+        echo "Installing Loki 3.0+ with OTLP support (monolithic mode for local testing)..."
+        # Using grafana/loki chart with:
+        # - deploymentMode: SingleBinary (monolithic mode for simplicity)
+        # - OTLP receiver enabled on port 4318 (HTTP) for OTel Collector logs
+        # - Filesystem storage (suitable for local testing)
+        if helm upgrade --install loki grafana/loki \
+          --namespace $OBSERVABILITY_NAMESPACE \
+          --set deploymentMode=SingleBinary \
+          --set loki.auth_enabled=false \
+          --set loki.commonConfig.replication_factor=1 \
+          --set loki.storage.type=filesystem \
+          --set loki.schemaConfig.configs[0].from="2024-01-01" \
+          --set loki.schemaConfig.configs[0].store=tsdb \
+          --set loki.schemaConfig.configs[0].object_store=filesystem \
+          --set loki.schemaConfig.configs[0].schema=v13 \
+          --set loki.schemaConfig.configs[0].index.prefix=loki_index_ \
+          --set loki.schemaConfig.configs[0].index.period=24h \
+          --set loki.limits_config.allow_structured_metadata=true \
+          --set loki.limits_config.volume_enabled=true \
+          --set loki.limits_config.retention_period=168h \
+          --set singleBinary.replicas=1 \
+          --set singleBinary.persistence.enabled=true \
+          --set singleBinary.persistence.size=10Gi \
+          --set read.replicas=0 \
+          --set write.replicas=0 \
+          --set backend.replicas=0 \
+          --set gateway.enabled=true \
+          --set gateway.replicas=1 \
+          --set test.enabled=false \
+          --set lokiCanary.enabled=false \
+          --wait --timeout=5m; then
+            echo_info "Loki 3.0+ installed successfully with OTLP support (monolithic mode)"
+            echo_info "Loki OTLP endpoint: http://loki-gateway.$OBSERVABILITY_NAMESPACE.svc.cluster.local/otlp/v1/logs"
+        else
+            echo_warn "Loki 3.0+ installation had issues, continuing..."
+        fi
+    fi
+
+    # Install Tempo with OTLP receiver enabled
+    # Check if Tempo is already installed
+    if helm list -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -q "^tempo[[:space:]]"; then
+        echo_info "Tempo already installed, skipping installation"
+    else
+        echo "Installing Tempo with OTLP receiver enabled..."
+        if helm upgrade --install tempo grafana/tempo \
+          --namespace $OBSERVABILITY_NAMESPACE \
+          --set serviceAccount.create=true \
+          --set tempo.receivers.otlp.protocols.grpc.endpoint="0.0.0.0:4317" \
+          --set tempo.receivers.otlp.protocols.http.endpoint="0.0.0.0:4318" \
+          --set tempo.reportingEnabled=false \
+          --wait --timeout=5m; then
+            echo_info "Tempo installed successfully with OTLP receiver on ports 4317 (gRPC) and 4318 (HTTP)"
+        else
+            echo_warn "Tempo installation had issues, continuing..."
+        fi
+    fi
+
+    # Install Logging Operator (for stdout/stderr log collection)
+    # Note: NKP platform will have this pre-installed, but we install it for local testing
+    LOGGING_OPERATOR_NAMESPACE="logging"
+    echo ""
+    echo "Installing Logging Operator (for stdout/stderr log collection)..."
+    helm repo add kube-logging https://kube-logging.github.io/helm-charts 2>/dev/null || true
+    helm repo update || true
+
+    # Check if Logging Operator is already installed
+    if helm list -n $LOGGING_OPERATOR_NAMESPACE 2>/dev/null | grep -qE "^logging-operator[[:space:]]"; then
+        echo_info "Logging Operator already installed, skipping installation"
+    else
+        echo "Installing Logging Operator..."
+        if helm upgrade --install logging-operator kube-logging/logging-operator \
+          --namespace $LOGGING_OPERATOR_NAMESPACE \
+          --create-namespace \
+          --wait --timeout=5m; then
+            echo_info "Logging Operator installed successfully"
+
+            # Wait for Logging Operator to be ready
+            echo "Waiting for Logging Operator to be ready..."
+            set +e
+            for i in {1..30}; do
+                if kubectl get pods -n $LOGGING_OPERATOR_NAMESPACE -l app.kubernetes.io/name=logging-operator 2>/dev/null | grep -q Running; then
+                    echo_info "Logging Operator is running"
+                    break
+                fi
+                if [ $i -eq 30 ]; then
+                    echo_warn "Logging Operator pods not ready after 2 minutes"
+                fi
+                sleep 2
+            done
+            set -e
+        else
+            echo_warn "Logging Operator installation had issues, continuing..."
+        fi
+    fi
+
+    # Configure Logging Operator to send logs to Loki
+    # Wait for Logging Operator CRDs to be available
+    echo ""
+    echo "Configuring Logging Operator to send logs to Loki..."
+    set +e
+    for i in {1..30}; do
+        if kubectl get crd loggings.logging.banzaicloud.io >/dev/null 2>&1; then
+            echo_info "Logging Operator CRDs are available"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo_warn "Logging Operator CRDs not found after 30 attempts"
+            echo_warn "Logging Operator may not be fully installed"
+        fi
+        sleep 2
+    done
+    set -e
+
+    # Get Loki gateway service for Logging Operator output
+    # Loki 3.0+ uses loki-gateway service, older versions use loki-loki-distributed-gateway
+    LOKI_GATEWAY_SVC=""
+    LOKI_GATEWAY_PORT="80"
+
+    # Try to find Loki gateway service (Loki 3.0+ naming)
+    if kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+        LOKI_GATEWAY_SVC="loki-gateway"
+        LOKI_GATEWAY_PORT=$(kubectl get svc "$LOKI_GATEWAY_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http-metrics")].port}' 2>/dev/null || echo "80")
+    elif kubectl get svc loki-loki-distributed-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+        LOKI_GATEWAY_SVC="loki-loki-distributed-gateway"
+        LOKI_GATEWAY_PORT=$(kubectl get svc "$LOKI_GATEWAY_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null || echo "80")
+    else
+        # Fallback: search by labels
+        LOKI_GATEWAY_SVC=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "loki-gateway")
+        LOKI_GATEWAY_PORT=$(kubectl get svc "$LOKI_GATEWAY_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "80")
+    fi
+
+    echo_info "Found Loki gateway service: $LOKI_GATEWAY_SVC (port: $LOKI_GATEWAY_PORT)"
+    LOKI_ENDPOINT="http://${LOKI_GATEWAY_SVC}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${LOKI_GATEWAY_PORT}/loki/api/v1/push"
+
+    # Create Logging resource (defines the logging system)
+    if kubectl get crd loggings.logging.banzaicloud.io >/dev/null 2>&1; then
+        if kubectl get logging default -n $LOGGING_OPERATOR_NAMESPACE >/dev/null 2>&1; then
+            echo_info "Logging resource already exists, updating it..."
+        else
+            echo "Creating Logging resource..."
+        fi
+
+        LOGGING_YAML=$(cat <<EOF
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: Logging
+metadata:
+  name: default
+  namespace: ${LOGGING_OPERATOR_NAMESPACE}
+spec:
+  controlNamespace: ${LOGGING_OPERATOR_NAMESPACE}
+EOF
+)
+        if echo "$LOGGING_YAML" | kubectl apply -f - 2>&1; then
+            echo_info "Logging resource created/updated"
+        else
+            echo_warn "Failed to create/update Logging resource"
+        fi
+
+        # Create Output resource (defines where logs go - Loki)
+        if kubectl get crd outputs.logging.banzaicloud.io >/dev/null 2>&1; then
+            if kubectl get output loki -n $LOGGING_OPERATOR_NAMESPACE >/dev/null 2>&1; then
+                echo_info "Loki Output resource already exists, updating it..."
+            else
+                echo "Creating Loki Output resource..."
+            fi
+
+            OUTPUT_YAML=$(cat <<EOF
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: Output
+metadata:
+  name: loki
+  namespace: ${LOGGING_OPERATOR_NAMESPACE}
+spec:
+  loki:
+    url: ${LOKI_ENDPOINT}
+    configure_kubernetes_labels: true
+    buffer:
+      type: file
+      path: /buffers/loki
+      flush_interval: 5s
+      flush_mode: immediate
+      retry_type: exponential_backoff
+      retry_wait: 1s
+      retry_max_interval: 60s
+      retry_timeout: 60m
+      chunk_limit_size: 1M
+      total_limit_size: 500M
+      overflow_action: block
+EOF
+)
+            if echo "$OUTPUT_YAML" | kubectl apply -f - 2>&1; then
+                echo_info "Loki Output resource created/updated"
+            else
+                echo_warn "Failed to create/update Loki Output resource"
+            fi
+
+            # Create Flow resource (defines what logs to collect and where to send them)
+            if kubectl get crd flows.logging.banzaicloud.io >/dev/null 2>&1; then
+                if kubectl get flow default -n $LOGGING_OPERATOR_NAMESPACE >/dev/null 2>&1; then
+                    echo_info "Flow resource already exists, updating it..."
+                else
+                    echo "Creating Flow resource to collect all pod logs..."
+                fi
+
+                # Create Flow to collect logs from all pods (stdout/stderr)
+                # Note: This collects logs from all pods by default
+                # You can filter by namespace or labels if needed
+                FLOW_YAML=$(cat <<EOF
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: Flow
+metadata:
+  name: default
+  namespace: ${LOGGING_OPERATOR_NAMESPACE}
+spec:
+  # Match all pods (stdout/stderr logs)
+  # Logging Operator will automatically collect from all pods via Fluent Bit/D DaemonSet
+  match:
+    - select: {}  # Empty select matches all pods
+  localOutputRefs:
+    - loki
+  filters:
+    - parser:
+        remove_key_name_field: true
+        reserve_data: true
+        parse:
+          type: json
+          time_key: time
+          time_format: "%Y-%m-%dT%H:%M:%S.%NZ"
+EOF
+)
+                if echo "$FLOW_YAML" | kubectl apply -f - 2>&1; then
+                    echo_info "Flow resource created/updated (collecting stdout/stderr logs from all pods)"
+                else
+                    echo_warn "Failed to create/update Flow resource"
+                fi
+            else
+                echo_warn "Flow CRD not found, skipping Flow creation"
+            fi
+        else
+            echo_warn "Output CRD not found, skipping Output creation"
+        fi
+    else
+        echo_warn "Logging CRD not found, skipping Logging Operator configuration"
+        echo_warn "Logging Operator may not be fully installed yet"
+    fi
+
     # Install cert-manager (required by OTel Operator for webhook certificates)
     echo "Installing cert-manager (required by OTel Operator)..."
     helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
     helm repo update || true
-    
-    if helm list -n cert-manager 2>/dev/null | grep -q cert-manager; then
+
+    if helm list -n cert-manager 2>/dev/null | grep -qE "^cert-manager[[:space:]]"; then
         echo_info "cert-manager already installed"
     else
         echo "Installing cert-manager..."
@@ -309,7 +647,7 @@ if [ "$OTEL_DEPLOYED" = "false" ]; then
             echo_info "cert-manager installed successfully"
             # Wait for cert-manager webhook to be ready
             echo "Waiting for cert-manager webhook to be ready..."
-            kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=3m 2>/dev/null || echo_warn "cert-manager webhook may not be ready yet"
+            run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=15s 2>/dev/null || echo_warn "cert-manager webhook may not be ready yet"
         else
             echo_warn "cert-manager installation failed"
             echo_warn "OTel Operator requires cert-manager. Please install manually:"
@@ -318,14 +656,14 @@ if [ "$OTEL_DEPLOYED" = "false" ]; then
             echo_warn "  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
         fi
     fi
-    
+
     # Install OTel Operator using Helm chart (preferred approach for platform)
     echo "Installing OTel Operator using Helm chart..."
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
     helm repo update || true
-    
+
     echo "Checking if OTel Operator is already installed..."
-    if helm list -n opentelemetry-operator-system 2>/dev/null | grep -q opentelemetry-operator; then
+    if helm list -n opentelemetry-operator-system 2>/dev/null | grep -qE "^opentelemetry-operator[[:space:]]"; then
         echo_info "OTel Operator Helm release already exists, checking if operator is running..."
         if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
             echo_info "OTel Operator is already installed and running"
@@ -360,33 +698,90 @@ if [ "$OTEL_DEPLOYED" = "false" ]; then
             OTEL_DEPLOYED=false
         fi
     fi
-    
-    # Wait for OTel Operator to be ready
-    if [ "$OTEL_DEPLOYED" = "true" ]; then
+
+    # Wait for OTel Operator to be ready (check if it exists)
+    OTel_OPERATOR_EXISTS=false
+    if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
+        OTel_OPERATOR_EXISTS=true
+        echo_info "OTel Operator is running"
+    elif [ "$OTEL_DEPLOYED" = "true" ]; then
         echo "Waiting for OTel Operator to be ready..."
         set +e  # Temporarily disable exit on error
-        if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=opentelemetry-operator -n opentelemetry-operator-system --timeout=3m 2>/dev/null; then
+        if run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=opentelemetry-operator -n opentelemetry-operator-system --timeout=15s 2>/dev/null; then
             echo_info "OTel Operator is ready"
+            OTel_OPERATOR_EXISTS=true
         else
             echo_warn "OTel Operator may not be fully ready yet, continuing..."
         fi
         set -e  # Re-enable exit on error
-        
-        # Create OpenTelemetryCollector instance if it doesn't exist
+    fi
+
+    # Create or update OpenTelemetryCollector instance (always check/update, regardless of installation method)
+    if [ "$OTel_OPERATOR_EXISTS" = "true" ] || kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
         echo "Checking for OpenTelemetryCollector instance..."
-        if kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -v NAME | grep -q .; then
-            echo_info "OpenTelemetryCollector instance already exists"
-            kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null
+        if kubectl get opentelemetrycollector otel-collector -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+            echo_info "OpenTelemetryCollector instance already exists, will update it..."
+            kubectl get opentelemetrycollector otel-collector -n $OBSERVABILITY_NAMESPACE 2>/dev/null
         else
             echo "Creating OpenTelemetryCollector instance..."
-            cat <<EOF | kubectl apply -f -
+        fi
+
+        # Wait for OTel Operator to be fully ready (CRD should be available)
+        echo "Waiting for OpenTelemetryCollector CRD to be available..."
+        set +e  # Temporarily disable exit on error
+        for i in {1..30}; do
+            if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
+                echo_info "OpenTelemetryCollector CRD is available"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                echo_error "OpenTelemetryCollector CRD not found after 30 attempts"
+                echo_warn "OTel Operator may not be fully installed. Please check:"
+                echo_warn "  kubectl get pods -n opentelemetry-operator-system"
+                echo_warn "  kubectl get crd | grep opentelemetry"
+            fi
+            sleep 2
+        done
+        set -e  # Re-enable exit on error
+
+        # Get Tempo service name for exporter endpoint
+        TEMPO_SVC_FOR_COLLECTOR="tempo"
+        if ! kubectl get svc tempo -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+            TEMPO_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "tempo")
+        fi
+
+        # Create OpenTelemetryCollector CR with config as object
+        # In v1beta1, config field expects an object (not a YAML string)
+
+        # Get Loki service URL for log export (Loki 3.0+ uses loki-gateway with OTLP support)
+        LOKI_SVC_FOR_COLLECTOR=""
+        LOKI_OTLP_PORT="80"
+        if kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+            LOKI_SVC_FOR_COLLECTOR="loki-gateway"
+            LOKI_OTLP_PORT=$(kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http-metrics")].port}' 2>/dev/null || echo "80")
+        elif kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki 2>/dev/null | grep -qi gateway; then
+            LOKI_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        fi
+        if [ -z "$LOKI_SVC_FOR_COLLECTOR" ]; then
+            LOKI_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "loki.*gateway|gateway.*loki" | head -1 | awk '{print $1}' || echo "")
+        fi
+        if [ -z "$LOKI_SVC_FOR_COLLECTOR" ] && kubectl get svc loki -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+            LOKI_SVC_FOR_COLLECTOR="loki"
+        fi
+        LOKI_SVC_FOR_COLLECTOR="${LOKI_SVC_FOR_COLLECTOR:-loki-gateway}"
+
+        echo_info "Using Loki service for OTel Collector: $LOKI_SVC_FOR_COLLECTOR (OTLP port: $LOKI_OTLP_PORT)"
+
+        # OTel Collector config for Loki 3.0+ with native OTLP support
+        # Uses otlphttp exporter to send logs to Loki's /otlp endpoint
+        COLLECTOR_CR_YAML=$(cat <<EOF
 apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   name: otel-collector
   namespace: ${OBSERVABILITY_NAMESPACE}
 spec:
-  config: |
+  config:
     receivers:
       otlp:
         protocols:
@@ -395,44 +790,215 @@ spec:
           http:
             endpoint: 0.0.0.0:4318
     processors:
-      batch:
+      batch: {}
       resource:
         attributes:
-          - key: service.name
+          - key: job
             value: otel-collector
+            action: upsert
+          - key: service.name
+            value: dm-nkp-gitops-custom-app
             action: upsert
     exporters:
       prometheusremotewrite:
         endpoint: http://prometheus-kube-prometheus-prometheus.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:9090/api/v1/write
-      logging:
-        loglevel: info
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        metric_expiration: 180m
+        enable_open_metrics: true
+      debug:
+        verbosity: detailed
       otlp/tempo:
-        endpoint: tempo.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:4317
+        endpoint: ${TEMPO_SVC_FOR_COLLECTOR}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:4317
+        tls:
+          insecure: true
+      otlphttp/loki:
+        endpoint: http://${LOKI_SVC_FOR_COLLECTOR}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${LOKI_OTLP_PORT}/otlp
         tls:
           insecure: true
     service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
       pipelines:
         traces:
           receivers: [otlp]
           processors: [batch, resource]
-          exporters: [otlp/tempo]
+          exporters: [otlp/tempo, debug]
         metrics:
           receivers: [otlp]
           processors: [batch, resource]
-          exporters: [prometheusremotewrite]
+          exporters: [prometheusremotewrite, prometheus]
         logs:
           receivers: [otlp]
           processors: [batch, resource]
-          exporters: [logging]
+          exporters: [otlphttp/loki, debug]
   mode: deployment
   replicas: 1
+  image: otel/opentelemetry-collector-contrib:latest
 EOF
-            if [ $? -eq 0 ]; then
-                echo_info "OpenTelemetryCollector instance created successfully"
-                echo "Waiting for OpenTelemetryCollector to be ready..."
-                sleep 5
+)
+        if echo "$COLLECTOR_CR_YAML" | kubectl apply -f - 2>&1; then
+            if kubectl get opentelemetrycollector otel-collector -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+                echo_info "OpenTelemetryCollector instance created/updated successfully"
             else
-                echo_warn "Failed to create OpenTelemetryCollector instance, you may need to create it manually"
+                echo_info "OpenTelemetryCollector instance applied (may take a moment to appear)"
+            fi
+            echo "Waiting for OpenTelemetryCollector pods to be ready..."
+            # Wait for collector pods to be created and ready
+            set +e  # Temporarily disable exit on error
+            for i in {1..60}; do
+                if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
+                    echo_info "OpenTelemetryCollector pods are running"
+                    kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
+                    break
+                fi
+                if [ $i -eq 60 ]; then
+                    echo_warn "OpenTelemetryCollector pods not ready after 2 minutes"
+                    echo_warn "Checking status:"
+                    kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null || true
+                    kubectl get opentelemetrycollector otel-collector -n $OBSERVABILITY_NAMESPACE 2>/dev/null || true
+                fi
+                sleep 2
+            done
+            set -e  # Re-enable exit on error
+        else
+            echo_error "Failed to create/update OpenTelemetryCollector instance"
+            echo_warn "Please check OTel Operator status:"
+            echo_warn "  kubectl get pods -n opentelemetry-operator-system"
+            echo_warn "  kubectl get crd opentelemetrycollectors.opentelemetry.io"
+            echo_warn ""
+            echo_warn "You can create it manually with the example shown in the output above"
+        fi
+    fi
+fi
+
+# Always ensure OpenTelemetryCollector CR exists (even if stack was already installed)
+if [ "$OBSERVABILITY_INSTALLED" = "true" ] && [ "$OTEL_DEPLOYED" = "true" ]; then
+    # Check if OTel Operator exists
+    if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
+        echo ""
+        echo "Ensuring OpenTelemetryCollector CR exists (stack was already installed)..."
+        if kubectl get opentelemetrycollector otel-collector -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+            echo_info "OpenTelemetryCollector instance already exists"
+        else
+            echo "Creating OpenTelemetryCollector instance..."
+            # Get Tempo service name for exporter endpoint
+            TEMPO_SVC_FOR_COLLECTOR="tempo"
+            if ! kubectl get svc tempo -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+                TEMPO_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "tempo")
+            fi
+
+            # Get Loki service URL for log export (Loki 3.0+ uses loki-gateway with OTLP support)
+            LOKI_SVC_FOR_COLLECTOR=""
+            LOKI_OTLP_PORT="80"
+            if kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+                LOKI_SVC_FOR_COLLECTOR="loki-gateway"
+                LOKI_OTLP_PORT=$(kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http-metrics")].port}' 2>/dev/null || echo "80")
+            elif kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki 2>/dev/null | grep -qi gateway; then
+                LOKI_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            fi
+            if [ -z "$LOKI_SVC_FOR_COLLECTOR" ]; then
+                LOKI_SVC_FOR_COLLECTOR=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "loki.*gateway|gateway.*loki" | head -1 | awk '{print $1}' || echo "")
+            fi
+            if [ -z "$LOKI_SVC_FOR_COLLECTOR" ] && kubectl get svc loki -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+                LOKI_SVC_FOR_COLLECTOR="loki"
+            fi
+            LOKI_SVC_FOR_COLLECTOR="${LOKI_SVC_FOR_COLLECTOR:-loki-gateway}"
+
+            echo_info "Using Loki service for OTel Collector: $LOKI_SVC_FOR_COLLECTOR (OTLP port: $LOKI_OTLP_PORT)"
+
+            # Create OpenTelemetryCollector CR for Loki 3.0+ with native OTLP support
+            COLLECTOR_CR_YAML=$(cat <<EOF
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  namespace: ${OBSERVABILITY_NAMESPACE}
+spec:
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+      resource:
+        attributes:
+          - key: job
+            value: otel-collector
+            action: upsert
+          - key: service.name
+            value: dm-nkp-gitops-custom-app
+            action: upsert
+    exporters:
+      prometheusremotewrite:
+        endpoint: http://prometheus-kube-prometheus-prometheus.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:9090/api/v1/write
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        metric_expiration: 180m
+        enable_open_metrics: true
+      debug:
+        verbosity: detailed
+      otlp/tempo:
+        endpoint: ${TEMPO_SVC_FOR_COLLECTOR}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:4317
+        tls:
+          insecure: true
+      otlphttp/loki:
+        endpoint: http://${LOKI_SVC_FOR_COLLECTOR}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${LOKI_OTLP_PORT}/otlp
+        tls:
+          insecure: true
+    service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [otlp/tempo, debug]
+        metrics:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [prometheusremotewrite, prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [otlphttp/loki, debug]
+  mode: deployment
+  replicas: 1
+  image: otel/opentelemetry-collector-contrib:latest
+EOF
+)
+            if echo "$COLLECTOR_CR_YAML" | kubectl apply -f - 2>&1; then
+                echo_info "OpenTelemetryCollector instance created successfully"
+                # Wait for pods to be ready
+                echo "Waiting for OpenTelemetryCollector pods to be ready..."
+                set +e
+                for i in {1..60}; do
+                    if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
+                        echo_info "OpenTelemetryCollector pods are running"
+                        kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
+                        break
+                    fi
+                    sleep 2
+                done
+                set -e
+            else
+                echo_warn "Failed to create OpenTelemetryCollector instance"
             fi
         fi
     fi
@@ -454,7 +1020,7 @@ OTEL_READY=false
 set +e  # Temporarily disable exit on error for wait checks
 OTEL_POD_NAME=$(kubectl get pods -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.items[?(@.metadata.name=~"otel.*collector.*")].metadata.name}' 2>/dev/null | cut -d' ' -f1 || echo "")
 if [ -n "$OTEL_POD_NAME" ]; then
-    if kubectl wait --for=condition=ready pod "$OTEL_POD_NAME" -n $OBSERVABILITY_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+    if run_with_timeout 15 kubectl wait --for=condition=ready pod "$OTEL_POD_NAME" -n $OBSERVABILITY_NAMESPACE --timeout=15s >/dev/null 2>&1; then
         echo_info "OTel Collector is ready: $OTEL_POD_NAME"
         OTEL_READY=true
     fi
@@ -462,10 +1028,10 @@ fi
 
 if [ "$OTEL_READY" = "false" ]; then
     # Try label-based selectors
-    if kubectl wait --for=condition=ready pod -l component=otel-collector -n $OBSERVABILITY_NAMESPACE --timeout=1m >/dev/null 2>&1; then
+    if run_with_timeout 15 kubectl wait --for=condition=ready pod -l component=otel-collector -n $OBSERVABILITY_NAMESPACE --timeout=15s >/dev/null 2>&1; then
         echo_info "OTel Collector is ready (component=otel-collector)"
         OTEL_READY=true
-    elif kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=opentelemetry-collector -n $OBSERVABILITY_NAMESPACE --timeout=1m >/dev/null 2>&1; then
+    elif run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=opentelemetry-collector -n $OBSERVABILITY_NAMESPACE --timeout=15s >/dev/null 2>&1; then
         echo_info "OTel Collector is ready (app.kubernetes.io/name=opentelemetry-collector)"
         OTEL_READY=true
     else
@@ -476,13 +1042,13 @@ if [ "$OTEL_READY" = "false" ]; then
     fi
 fi
 
-if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n $OBSERVABILITY_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+if run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n $OBSERVABILITY_NAMESPACE --timeout=15s >/dev/null 2>&1; then
     echo_info "Prometheus is ready"
 else
     echo_warn "Prometheus may not be ready yet"
 fi
 
-if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n $OBSERVABILITY_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+if run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n $OBSERVABILITY_NAMESPACE --timeout=15s >/dev/null 2>&1; then
     echo_info "Grafana is ready"
 else
     echo_warn "Grafana may not be ready yet"
@@ -493,6 +1059,9 @@ echo ""
 echo_step "Verifying OTel deployment..."
 OTEL_VERIFIED=false
 OTEL_TYPE=""
+OTEL_OPERATOR_RUNNING=false
+OTEL_COLLECTOR_CR_EXISTS=false
+OTEL_COLLECTOR_PODS_RUNNING=false
 
 # Check if OTel Operator is installed (uses OpenTelemetryCollector CRD)
 if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; then
@@ -502,21 +1071,24 @@ if kubectl get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1; the
     if kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep -q Running; then
         echo_info "OTel Operator pods are running"
         kubectl get pods -n opentelemetry-operator-system -l app.kubernetes.io/name=opentelemetry-operator 2>/dev/null | grep Running || true
+        OTEL_OPERATOR_RUNNING=true
         # Check if OpenTelemetryCollector instance exists
         if kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -v NAME | grep -q .; then
             echo_info "OpenTelemetryCollector instance(s) found"
             kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null
+            OTEL_COLLECTOR_CR_EXISTS=true
             # Check if collector pods are running (managed by operator)
             if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
                 echo_info "OpenTelemetryCollector pods are running (managed by operator)"
                 kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
+                OTEL_COLLECTOR_PODS_RUNNING=true
                 OTEL_VERIFIED=true
             else
-                echo_warn "OpenTelemetryCollector CR exists but pods are not running yet"
+                echo_warn "OpenTelemetryCollector CR exists but pods are not running yet (may be starting up)"
             fi
         else
             echo_warn "OTel Operator is installed but no OpenTelemetryCollector instance found"
-            echo_warn "You need to create an OpenTelemetryCollector custom resource"
+            echo_warn "The script should have created one above. Checking if creation failed..."
         fi
     else
         echo_warn "OTel Operator CRD exists but operator pods are not running"
@@ -526,7 +1098,7 @@ fi
 # Note: We only check for OTel Operator now (not direct Collector Helm chart)
 # OTel Collector instances are managed by the Operator via OpenTelemetryCollector CR
 # Check if OpenTelemetryCollector pods are running (created by operator)
-if [ "$OTEL_VERIFIED" = "false" ]; then
+if [ "$OTEL_VERIFIED" = "false" ] && [ "$OTEL_COLLECTOR_CR_EXISTS" = "true" ]; then
     if kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep -q Running; then
         echo_info "OpenTelemetryCollector pods are running (managed by operator)"
         kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator 2>/dev/null | grep Running || true
@@ -534,40 +1106,93 @@ if [ "$OTEL_VERIFIED" = "false" ]; then
     fi
 fi
 
-# Final check: Look for any OTel-related pods/services
+# Final check: Provide appropriate error messages based on what's missing
 if [ "$OTEL_VERIFIED" = "false" ]; then
     echo ""
-    echo_error "OTel Collector/Operator not found or not ready!"
-    echo_warn "This will cause issues with telemetry export (metrics and traces will not work)."
+    if [ "$OTEL_OPERATOR_RUNNING" = "true" ] && [ "$OTEL_COLLECTOR_CR_EXISTS" = "false" ]; then
+        echo_error "OpenTelemetryCollector CR instance not found!"
+        echo_warn "OTel Operator is running, but no OpenTelemetryCollector CR exists."
+        echo_warn "The script should have created one above. Please check the output above for errors."
+        echo_warn "You can create it manually with the example shown below."
+    elif [ "$OTEL_OPERATOR_RUNNING" = "true" ] && [ "$OTEL_COLLECTOR_CR_EXISTS" = "true" ] && [ "$OTEL_COLLECTOR_PODS_RUNNING" = "false" ]; then
+        echo_error "OpenTelemetryCollector pods are not running!"
+        echo_warn "OTel Operator is running and CR exists, but collector pods are not ready yet."
+        echo_warn "This may be normal if the CR was just created - pods may take a minute to start."
+        echo_warn "Check pod status: kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator"
+    elif [ "$OTEL_OPERATOR_RUNNING" = "false" ]; then
+        echo_error "OTel Operator not found or not running!"
+        echo_warn "OTel Operator is required for metrics and traces."
+    else
+        echo_error "OTel Collector/Operator not found or not ready!"
+        echo_warn "This will cause issues with telemetry export (metrics and traces will not work)."
+    fi
+
     echo_warn "The application will still run, but metrics/traces export will fail."
     echo ""
     echo "Checking for any OTel-related resources..."
-    kubectl get pods -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel pods found"
+    kubectl get pods -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel Collector pods found in $OBSERVABILITY_NAMESPACE namespace"
+    kubectl get pods -n opentelemetry-operator-system 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel Operator pods found in opentelemetry-operator-system namespace"
     kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel services found"
-    kubectl get deployment -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel deployments found"
-    kubectl get statefulset -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "otel|opentelemetry" || echo_warn "  No OTel statefulsets found"
+    kubectl get opentelemetrycollector -n $OBSERVABILITY_NAMESPACE 2>/dev/null || echo_warn "  No OpenTelemetryCollector CR instances found"
 fi
 
 set -e  # Re-enable exit on error
 
 if [ "$OTEL_VERIFIED" = "false" ]; then
     echo ""
-    echo_warn "⚠️  WARNING: OTel Collector/Operator is not deployed or not ready"
-    echo_warn "   Metrics and traces will not work until OTel Collector is deployed."
-    echo_warn "   Deployment options:"
+    if [ "$OTEL_OPERATOR_RUNNING" = "true" ] && [ "$OTEL_COLLECTOR_CR_EXISTS" = "false" ]; then
+        echo_warn "⚠️  WARNING: OpenTelemetryCollector CR instance not found"
+        echo_warn "   OTel Operator is running, but no Collector CR exists."
+        echo_warn "   The script should have created one above. Please check the output above for errors."
+        echo_warn "   You can create it manually with the example shown below."
+        echo_warn ""
+        echo_warn "   kubectl apply -f - <<'EOF'"
+        echo_warn "   apiVersion: opentelemetry.io/v1beta1"
+        echo_warn "   kind: OpenTelemetryCollector"
+        echo_warn "   metadata:"
+        echo_warn "     name: otel-collector"
+        echo_warn "     namespace: $OBSERVABILITY_NAMESPACE"
+        echo_warn "   spec:"
+        echo_warn "     config: |"
+        echo_warn "       receivers:"
+        echo_warn "         otlp:"
+        echo_warn "           protocols:"
+        echo_warn "             grpc:"
+        echo_warn "               endpoint: 0.0.0.0:4317"
+        echo_warn "       exporters:"
+        echo_warn "         prometheusremotewrite:"
+        echo_warn "           endpoint: http://prometheus-kube-prometheus-prometheus.$OBSERVABILITY_NAMESPACE.svc.cluster.local:9090/api/v1/write"
+        echo_warn "       service:"
+        echo_warn "         pipelines:"
+        echo_warn "           metrics:"
+        echo_warn "             receivers: [otlp]"
+        echo_warn "             exporters: [prometheusremotewrite]"
+        echo_warn "     mode: deployment"
+        echo_warn "     replicas: 1"
+        echo_warn "   'EOF'"
+    elif [ "$OTEL_OPERATOR_RUNNING" = "true" ] && [ "$OTEL_COLLECTOR_CR_EXISTS" = "true" ] && [ "$OTEL_COLLECTOR_PODS_RUNNING" = "false" ]; then
+        echo_warn "⚠️  WARNING: OpenTelemetryCollector pods are not running yet"
+        echo_warn "   OTel Operator and CR exist, but collector pods are still starting."
+        echo_warn "   This is normal if the CR was just created - wait a minute and check:"
+        echo_warn "   kubectl get pods -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/managed-by=opentelemetry-operator"
+    else
+        echo_warn "⚠️  WARNING: OTel Collector/Operator is not deployed or not ready"
+        echo_warn "   Metrics and traces will not work until OTel Collector is deployed."
+        echo_warn "   Deployment options:"
+        echo_warn ""
+        echo_warn "   Deploy cert-manager first (required by OTel Operator):"
+        echo_warn "     helm repo add jetstack https://charts.jetstack.io"
+        echo_warn "     helm repo update"
+        echo_warn "     helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
+        echo_warn "   Deploy OTel Operator (Helm chart - recommended):"
+        echo_warn "     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts"
+        echo_warn "     helm repo update"
+        echo_warn "     helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \\"
+        echo_warn "       --namespace opentelemetry-operator-system --create-namespace"
+        echo_warn "     # Then create an OpenTelemetryCollector custom resource"
+    fi
     echo_warn ""
-    echo_warn "   Deploy cert-manager first (required by OTel Operator):"
-    echo_warn "     helm repo add jetstack https://charts.jetstack.io"
-    echo_warn "     helm repo update"
-    echo_warn "     helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true"
-    echo_warn "   Deploy OTel Operator (Helm chart - recommended):"
-    echo_warn "     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts"
-    echo_warn "     helm repo update"
-    echo_warn "     helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \\"
-    echo_warn "       --namespace opentelemetry-operator-system --create-namespace"
-    echo_warn "     # Then create an OpenTelemetryCollector custom resource"
-    echo_warn ""
-    echo_warn "   Continuing with deployment, but telemetry export will fail..."
+    echo_warn "   Continuing with deployment, but telemetry export will fail until Collector is ready..."
 fi
 
 echo_info "Observability stack deployment completed. Proceeding to Gateway API deployment..."
@@ -588,11 +1213,11 @@ else
         echo_warn "Failed to install Gateway API CRDs, continuing..."
     }
     set -e  # Re-enable exit on error
-    
+
     # Wait for CRDs to be established
     echo "Waiting for Gateway API CRDs..."
     set +e  # Temporarily disable exit on error
-    kubectl wait --for condition=established --timeout=60s crd/gateways.gateway.networking.k8s.io >/dev/null 2>&1 || echo_warn "Gateway API CRDs may not be ready yet"
+    run_with_timeout 15 kubectl wait --for condition=established --timeout=15s crd/gateways.gateway.networking.k8s.io >/dev/null 2>&1 || echo_warn "Gateway API CRDs may not be ready yet"
     set -e  # Re-enable exit on error
     echo_info "Gateway API CRDs installed"
 fi
@@ -612,16 +1237,22 @@ fi
 kubectl create namespace $TRAEFIK_NAMESPACE --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
 
 # Install Traefik with Gateway API support
+# Skip CRDs since Gateway API CRDs are already installed via kubectl
+echo "Installing Traefik (this may take a few minutes)..."
 if helm upgrade --install traefik traefik/traefik \
   --namespace $TRAEFIK_NAMESPACE \
   --set experimental.kubernetesGateway.enabled=true \
   --set ports.web.nodePort=30080 \
   --set ports.websecure.nodePort=30443 \
   --set service.type=NodePort \
-  --wait --timeout=5m >/dev/null 2>&1; then
+  --skip-crds \
+  --wait --timeout=2m 2>&1 | tee /tmp/traefik-install.log; then
     echo_info "Traefik with Gateway API support installed successfully"
 else
+    INSTALL_ERR=$(cat /tmp/traefik-install.log 2>/dev/null | tail -5)
     echo_warn "Traefik installation had issues, continuing..."
+    echo_warn "Last few lines of install log:"
+    echo_warn "$INSTALL_ERR"
 fi
 
 set -e  # Re-enable exit on error
@@ -629,10 +1260,13 @@ set -e  # Re-enable exit on error
 # Wait for Traefik to be ready
 echo "Waiting for Traefik to be ready..."
 set +e  # Temporarily disable exit on error
-if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=traefik -n $TRAEFIK_NAMESPACE --timeout=3m >/dev/null 2>&1; then
+if run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=traefik -n $TRAEFIK_NAMESPACE --timeout=15s 2>&1; then
     echo_info "Traefik is ready"
 else
-    echo_warn "Traefik may not be ready yet, continuing..."
+    echo_warn "Traefik may not be ready yet, checking status..."
+    kubectl get pods -n $TRAEFIK_NAMESPACE -l app.kubernetes.io/name=traefik 2>&1 || true
+    kubectl describe pods -n $TRAEFIK_NAMESPACE -l app.kubernetes.io/name=traefik 2>&1 | tail -20 || true
+    echo_warn "Continuing anyway..."
 fi
 set -e  # Re-enable exit on error
 
@@ -713,6 +1347,142 @@ set -e  # Re-enable exit on error
 
 echo_info "Gateway API + Traefik deployment completed"
 
+# Step 8b: Install MetalLB for LoadBalancer support (local testing)
+echo ""
+echo_step "Step 8b: Installing MetalLB for LoadBalancer support..."
+
+METALLB_NAMESPACE="metallb-system"
+
+# Check if MetalLB is already installed
+if helm list -n $METALLB_NAMESPACE 2>/dev/null | grep -qE "^metallb[[:space:]]"; then
+    echo_info "MetalLB already installed"
+else
+    # Detect Docker network subnet for kind cluster
+    DOCKER_SUBNET=$(docker network inspect kind 2>/dev/null | jq -r '.[0].IPAM.Config[0].Subnet' 2>/dev/null || echo "")
+    if [ -n "$DOCKER_SUBNET" ] && [ "$DOCKER_SUBNET" != "null" ]; then
+        echo "Detected Docker network subnet: $DOCKER_SUBNET"
+        # Calculate IP pool from Docker subnet (use last /24 for kind clusters)
+        # Example: 172.18.0.0/16 -> 172.18.255.200-172.18.255.250
+        IP_POOL_START="172.18.255.200"
+        IP_POOL_END="172.18.255.250"
+
+        # Try to extract base IP from subnet if possible
+        if [[ "$DOCKER_SUBNET" =~ ^([0-9]+\.[0-9]+)\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+            BASE_IP="${BASH_REMATCH[1]}"
+            IP_POOL_START="${BASE_IP}.255.200"
+            IP_POOL_END="${BASE_IP}.255.250"
+        fi
+        echo "Using IP pool: $IP_POOL_START-$IP_POOL_END"
+    else
+        # Default IP pool for kind clusters
+        IP_POOL_START="172.18.255.200"
+        IP_POOL_END="172.18.255.250"
+        echo_warn "Could not detect Docker network subnet, using default IP pool: $IP_POOL_START-$IP_POOL_END"
+    fi
+
+    # Install MetalLB using official kubectl manifests (more reliable than Helm)
+    echo "Installing MetalLB using official manifests..."
+
+    # Create namespace
+    kubectl create namespace $METALLB_NAMESPACE --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
+
+    METALLB_INSTALLED=true
+    set +e  # Temporarily disable exit on error
+
+    # Install MetalLB using official manifests
+    if kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.6/config/manifests/metallb-native.yaml >/dev/null 2>&1; then
+        echo_info "MetalLB manifests applied"
+
+        # Wait for MetalLB pods to be ready
+        echo "Waiting for MetalLB pods to be ready..."
+        for i in {1..60}; do
+            READY_PODS=$(kubectl get pods -n $METALLB_NAMESPACE -l app=metallb --no-headers 2>/dev/null | grep -c Running || echo "0")
+            TOTAL_PODS=$(kubectl get pods -n $METALLB_NAMESPACE -l app=metallb --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$READY_PODS" -ge 2 ] && [ "$READY_PODS" = "$TOTAL_PODS" ] && [ "$TOTAL_PODS" -gt 0 ]; then
+                echo_info "MetalLB pods are ready ($READY_PODS/$TOTAL_PODS)"
+                break
+            fi
+            if [ $i -eq 60 ]; then
+                echo_warn "MetalLB pods not ready after 2 minutes (may still be starting)"
+            fi
+            sleep 2
+        done
+
+        # Configure IP address pool
+        echo "Configuring MetalLB IP address pool..."
+        if kubectl apply -f - <<EOF >/dev/null 2>&1
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: ${METALLB_NAMESPACE}
+spec:
+  addresses:
+  - ${IP_POOL_START}-${IP_POOL_END}
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default
+  namespace: ${METALLB_NAMESPACE}
+spec:
+  ipAddressPools:
+  - default-pool
+EOF
+        then
+            echo_info "MetalLB IP address pool configured"
+        else
+            echo_warn "Failed to configure IP address pool, continuing..."
+        fi
+    else
+        echo_warn "MetalLB installation failed, continuing with NodePort..."
+        METALLB_INSTALLED=false
+    fi
+    set -e  # Re-enable exit on error
+
+    # Wait for MetalLB to be ready
+    if [ "$METALLB_INSTALLED" = "true" ]; then
+        # MetalLB pods were already checked above, just verify they're still ready
+        echo "Verifying MetalLB readiness..."
+        set +e  # Temporarily disable exit on error
+        READY_PODS=$(kubectl get pods -n $METALLB_NAMESPACE -l app=metallb --no-headers 2>/dev/null | grep -c Running || echo "0")
+        if [ "$READY_PODS" -ge 2 ]; then
+            echo_info "MetalLB is ready ($READY_PODS pods running)"
+            METALLB_READY=true
+        else
+            echo_warn "MetalLB may not be fully ready yet ($READY_PODS pods running), but continuing..."
+            METALLB_READY=false
+        fi
+        set -e  # Re-enable exit on error
+
+        # Update Traefik service to LoadBalancer (if MetalLB is ready)
+        if [ "$METALLB_READY" = "true" ]; then
+            echo "Updating Traefik service to LoadBalancer type..."
+            if kubectl patch svc traefik -n $TRAEFIK_NAMESPACE -p '{"spec":{"type":"LoadBalancer"}}' 2>&1; then
+                echo_info "Traefik service updated to LoadBalancer"
+
+                # Wait for LoadBalancer IP assignment
+                echo "Waiting for LoadBalancer IP assignment..."
+                for i in {1..30}; do
+                    LB_IP=$(kubectl get svc traefik -n $TRAEFIK_NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+                    if [ -n "$LB_IP" ]; then
+                        echo_info "Traefik LoadBalancer IP assigned: $LB_IP"
+                        break
+                    fi
+                    sleep 2
+                done
+
+                if [ -z "$LB_IP" ]; then
+                    echo_warn "LoadBalancer IP not assigned yet (may take a moment)"
+                    echo "You can check with: kubectl get svc traefik -n $TRAEFIK_NAMESPACE"
+                fi
+            else
+                echo_warn "Failed to update Traefik service to LoadBalancer, continuing with NodePort..."
+            fi
+        fi
+    fi
+fi
+
 # Small delay to ensure Gateway API CRDs are fully ready
 sleep 3
 
@@ -730,6 +1500,73 @@ if [ "$IMAGE_TAG" = "$IMAGE_NAME" ]; then
     # No tag specified, use "demo" as default
     IMAGE_TAG="demo"
 fi
+
+# Detect Loki and Tempo services for datasource URLs (before Helm deployment)
+echo ""
+echo "Detecting Loki and Tempo services for Grafana datasource configuration..."
+LOKI_SVC=""
+LOKI_PORT=""
+LOKI_URL=""
+set +e  # Temporarily disable exit on error
+# Try different service name patterns for Loki
+if kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki 2>/dev/null | grep -qi gateway; then
+    LOKI_SVC=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || \
+               kubectl get svc -n $OBSERVABILITY_NAMESPACE 2>/dev/null | grep -iE "loki.*gateway|gateway.*loki" | head -1 | awk '{print $1}')
+    if [ -n "$LOKI_SVC" ]; then
+        LOKI_PORT=$(kubectl get svc "$LOKI_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null)
+        if [ -z "$LOKI_PORT" ]; then
+            LOKI_PORT=$(kubectl get svc "$LOKI_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "80")
+        fi
+    fi
+elif kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+    LOKI_SVC="loki-gateway"
+    LOKI_PORT=$(kubectl get svc "$LOKI_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http-metrics")].port}' 2>/dev/null || echo "80")
+elif kubectl get svc loki-loki-distributed-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+    LOKI_SVC="loki-loki-distributed-gateway"
+    LOKI_PORT=$(kubectl get svc "$LOKI_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null || echo "80")
+elif kubectl get svc loki -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+    LOKI_SVC="loki"
+    LOKI_PORT=$(kubectl get svc "$LOKI_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "3100")
+fi
+
+if [ -n "$LOKI_SVC" ] && [ -n "$LOKI_PORT" ]; then
+    LOKI_URL="http://${LOKI_SVC}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${LOKI_PORT}"
+    echo_info "Found Loki service: $LOKI_SVC (port: $LOKI_PORT)"
+else
+    echo_warn "Loki service not found, using default URL"
+    LOKI_URL="http://loki-gateway.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:80"
+fi
+set -e  # Re-enable exit on error
+
+TEMPO_SVC=""
+TEMPO_PORT=""
+TEMPO_URL=""
+set +e  # Temporarily disable exit on error
+# Try different service name patterns for Tempo
+if kubectl get svc tempo -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
+    TEMPO_SVC="tempo"
+    TEMPO_PORT=$(kubectl get svc "$TEMPO_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null)
+    if [ -z "$TEMPO_PORT" ]; then
+        TEMPO_PORT=$(kubectl get svc "$TEMPO_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "3200")
+    fi
+elif kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=tempo 2>/dev/null | grep -q tempo; then
+    TEMPO_SVC=$(kubectl get svc -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [ -n "$TEMPO_SVC" ]; then
+        TEMPO_PORT=$(kubectl get svc "$TEMPO_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[?(@.name=="http")].port}' 2>/dev/null)
+        if [ -z "$TEMPO_PORT" ]; then
+            TEMPO_PORT=$(kubectl get svc "$TEMPO_SVC" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "3200")
+        fi
+    fi
+fi
+
+if [ -n "$TEMPO_SVC" ] && [ -n "$TEMPO_PORT" ]; then
+    TEMPO_URL="http://${TEMPO_SVC}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${TEMPO_PORT}"
+    echo_info "Found Tempo service: $TEMPO_SVC (port: $TEMPO_PORT)"
+else
+    echo_warn "Tempo service not found, using default URL"
+    TEMPO_URL="http://tempo.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:3200"
+fi
+set -e  # Re-enable exit on error
 
 # Check if Gateway API is available (for HTTPRoute deployment)
 # Since we just deployed it in Step 8, it should be available
@@ -834,16 +1671,29 @@ if [ -f "chart/dm-nkp-gitops-custom-app/values-local-testing.yaml" ]; then
     echo "Deploying via Helm chart with local testing values..."
     echo "  Image: $IMAGE_REPO:$IMAGE_TAG"
     echo "  Namespace: $APP_NAMESPACE"
-    
+
     # Build helm command with conditional gateway.enabled
+    # Ensure dashboards are deployed to observability namespace where Grafana is
+    # Helm upgrade will update existing resources including dashboards
+    # Enable datasources via ConfigMap (persistent, survives restarts)
     HELM_CMD="helm upgrade --install $APP_NAME chart/dm-nkp-gitops-custom-app \
       --namespace $APP_NAMESPACE \
       --create-namespace \
       -f chart/dm-nkp-gitops-custom-app/values-local-testing.yaml \
       --set image.repository=$IMAGE_REPO \
       --set image.tag=$IMAGE_TAG \
-      --set image.pullPolicy=Never"
-    
+      --set image.pullPolicy=Never \
+      --set tls.enabled=false \
+      --set tls.clusterIssuer.create=false \
+      --set tls.certificate.create=false \
+      --set grafana.dashboards.enabled=true \
+      --set grafana.dashboards.namespace=$OBSERVABILITY_NAMESPACE \
+      --set grafana.datasources.enabled=true \
+      --set grafana.datasources.namespace=$OBSERVABILITY_NAMESPACE \
+      --set grafana.datasources.loki.url=\"$LOKI_URL\" \
+      --set grafana.datasources.tempo.url=\"$TEMPO_URL\" \
+      --set grafana.datasources.prometheus.url=\"http://prometheus-kube-prometheus-prometheus.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:9090\""
+
     # Enable Gateway API if detected
     if [ "$ENABLE_GATEWAY" = "true" ]; then
         HELM_CMD="$HELM_CMD --set gateway.enabled=true"
@@ -851,9 +1701,9 @@ if [ -f "chart/dm-nkp-gitops-custom-app/values-local-testing.yaml" ]; then
     else
         echo "  Gateway API: disabled (not detected)"
     fi
-    
-    HELM_CMD="$HELM_CMD --wait --timeout=5m"
-    
+
+    HELM_CMD="$HELM_CMD --wait --timeout=2m"
+
     echo "Running Helm command..."
     echo "Command: $HELM_CMD"
     set +e  # Temporarily disable exit on error to handle Helm failures gracefully
@@ -875,7 +1725,7 @@ if [ -f "chart/dm-nkp-gitops-custom-app/values-local-testing.yaml" ]; then
                 sed "s|image:.*|image: ${IMAGE_NAME}|" | \
                 sed 's|imagePullPolicy:.*|imagePullPolicy: Never|' | \
                 kubectl apply -f - || true
-            
+
             # Add OTel environment variables
             echo "Adding OpenTelemetry environment variables..."
             kubectl set env deployment/$APP_NAME \
@@ -884,7 +1734,7 @@ if [ -f "chart/dm-nkp-gitops-custom-app/values-local-testing.yaml" ]; then
                 OTEL_RESOURCE_ATTRIBUTES="service.name=$APP_NAME,service.version=0.1.0,environment=local" \
                 OTEL_EXPORTER_OTLP_INSECURE=true \
                 -n $APP_NAMESPACE || true
-            
+
             kubectl apply -f manifests/base/service.yaml || true
             echo_info "Application deployed via manifests"
         else
@@ -903,7 +1753,7 @@ else
             sed "s|image:.*|image: ${IMAGE_NAME}|" | \
             sed 's|imagePullPolicy:.*|imagePullPolicy: Never|' | \
             kubectl apply -f - || true
-        
+
         # Add OTel environment variables
         echo "Adding OpenTelemetry environment variables..."
         kubectl set env deployment/$APP_NAME \
@@ -912,7 +1762,7 @@ else
             OTEL_RESOURCE_ATTRIBUTES="service.name=$APP_NAME,service.version=0.1.0,environment=local" \
             OTEL_EXPORTER_OTLP_INSECURE=true \
             -n $APP_NAMESPACE || true
-        
+
         kubectl apply -f manifests/base/service.yaml || true
         echo_info "Application deployed via manifests"
     else
@@ -924,13 +1774,13 @@ fi
 echo "Waiting for application deployment to be ready..."
 # Try multiple label selectors (Helm chart uses app.kubernetes.io/name, manifests might use app)
 APP_READY=false
-if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=$APP_NAME -n $APP_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+if run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=$APP_NAME -n $APP_NAMESPACE --timeout=15s >/dev/null 2>&1; then
     echo_info "Application pods are ready (app.kubernetes.io/name=$APP_NAME)"
     APP_READY=true
-elif kubectl wait --for=condition=ready pod -l app=$APP_NAME -n $APP_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+elif run_with_timeout 15 kubectl wait --for=condition=ready pod -l app=$APP_NAME -n $APP_NAMESPACE --timeout=15s >/dev/null 2>&1; then
     echo_info "Application pods are ready (app=$APP_NAME)"
     APP_READY=true
-elif kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$APP_NAME -n $APP_NAMESPACE --timeout=2m >/dev/null 2>&1; then
+elif run_with_timeout 15 kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$APP_NAME -n $APP_NAMESPACE --timeout=15s >/dev/null 2>&1; then
     echo_info "Application pods are ready (app.kubernetes.io/instance=$APP_NAME)"
     APP_READY=true
 fi
@@ -963,6 +1813,47 @@ fi
 
 echo_info "Application deployed with OpenTelemetry"
 
+# Verify Grafana dashboards are deployed
+echo ""
+echo_step "Verifying Grafana dashboards deployment..."
+DASHBOARD_CONFIGMAPS=$(kubectl get configmap -n $OBSERVABILITY_NAMESPACE -l grafana_dashboard=1 2>/dev/null | grep -c dashboard || echo "0")
+if [ "$DASHBOARD_CONFIGMAPS" -gt 0 ]; then
+    echo_info "Found $DASHBOARD_CONFIGMAPS Grafana dashboard ConfigMap(s) in $OBSERVABILITY_NAMESPACE namespace"
+    kubectl get configmap -n $OBSERVABILITY_NAMESPACE -l grafana_dashboard=1 2>/dev/null | grep dashboard || true
+    echo ""
+    echo "Note: kube-prometheus-stack should auto-discover dashboards from ConfigMaps with label grafana_dashboard=1"
+    echo "If dashboards don't appear in Grafana UI, check Grafana configuration:"
+    echo "  kubectl get configmap -n $OBSERVABILITY_NAMESPACE -l app.kubernetes.io/name=grafana -o yaml | grep -A 20 dashboards"
+
+    # Verify dashboard ConfigMaps have the correct structure
+    echo ""
+    echo "Verifying dashboard ConfigMap structure..."
+    for CM_NAME in $(kubectl get configmap -n $OBSERVABILITY_NAMESPACE -l grafana_dashboard=1 -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+        if kubectl get configmap "$CM_NAME" -n $OBSERVABILITY_NAMESPACE -o jsonpath='{.data}' 2>/dev/null | grep -q "dashboard"; then
+            echo_info "  ✓ $CM_NAME has dashboard data"
+        else
+            echo_warn "  ⚠ $CM_NAME may be missing dashboard data"
+        fi
+    done
+else
+    echo_warn "No Grafana dashboards ConfigMaps found in $OBSERVABILITY_NAMESPACE namespace"
+    echo_warn "Dashboards should be deployed by Helm chart. Checking Helm release..."
+    if helm get manifest $APP_NAME -n $APP_NAMESPACE 2>/dev/null | grep -qi "grafana.*dashboard"; then
+        echo_warn "  Dashboard resources found in Helm manifest but ConfigMaps not created"
+        echo_warn "  This may be a namespace mismatch. Checking..."
+        # Check if dashboards were deployed to wrong namespace
+        WRONG_NS_DASHBOARDS=$(kubectl get configmap -A -l grafana_dashboard=1 2>/dev/null | grep -c dashboard || echo "0")
+        if [ "$WRONG_NS_DASHBOARDS" -gt 0 ]; then
+            echo_warn "  Found dashboards in other namespaces:"
+            kubectl get configmap -A -l grafana_dashboard=1 2>/dev/null | grep dashboard || true
+            echo_warn "  Consider moving them to $OBSERVABILITY_NAMESPACE namespace"
+        fi
+    else
+        echo_warn "  No dashboard resources in Helm manifest"
+        echo_warn "  Ensure grafana.dashboards.enabled=true in values"
+    fi
+fi
+
 # Step 9b: Verify HTTPRoute deployment (if Gateway API is available)
 echo ""
 echo_step "Step 9b: Verifying HTTPRoute deployment..."
@@ -983,7 +1874,7 @@ if kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
         # Try any HTTPRoute in namespace (should only be one for this app)
         HTTPROUTE_NAME=$(kubectl get httproute -n $APP_NAMESPACE -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     fi
-    
+
     if [ -n "$HTTPROUTE_NAME" ]; then
         echo_info "HTTPRoute deployed via Helm chart: $HTTPROUTE_NAME"
         kubectl get httproute -n $APP_NAMESPACE $HTTPROUTE_NAME
@@ -1037,238 +1928,184 @@ echo_info "Generated 100 requests"
 # Wait a bit for telemetry to be collected
 sleep 5
 
-# Step 11: Configure Grafana datasources (Loki and Tempo)
+# Step 11: Create and Verify Grafana datasources
 echo ""
-echo_step "Step 11: Configuring Grafana datasources..."
-echo "Configuring Loki and Tempo datasources in Grafana..."
-
-# Get Grafana admin password
-GRAFANA_PASSWORD=$(kubectl get secret -n $OBSERVABILITY_NAMESPACE prometheus-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "admin")
+echo_step "Step 11: Creating Grafana datasources..."
 
 # Wait for Grafana to be ready
 echo "Waiting for Grafana to be ready..."
 set +e  # Temporarily disable exit on error
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n $OBSERVABILITY_NAMESPACE --timeout=2m >/dev/null 2>&1 || echo_warn "Grafana may not be fully ready yet"
-set -e  # Re-enable exit on error
-
-# Port forward to Grafana in background
-LOCAL_PORT=3000
-kubectl port-forward -n $OBSERVABILITY_NAMESPACE svc/prometheus-grafana $LOCAL_PORT:80 >/dev/null 2>&1 &
-GRAFANA_PF_PID=$!
-sleep 5
-
-# Wait for Grafana API to be ready
-echo "Waiting for Grafana API..."
-API_READY=false
 for i in {1..30}; do
-    if curl -s -u "admin:${GRAFANA_PASSWORD}" "http://localhost:${LOCAL_PORT}/api/health" >/dev/null 2>&1; then
-        API_READY=true
+    if kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n $OBSERVABILITY_NAMESPACE --timeout=5s >/dev/null 2>&1; then
+        echo_info "Grafana is ready"
         break
     fi
-    sleep 1
+    if [ $i -eq 30 ]; then
+        echo_warn "Grafana may not be fully ready yet, continuing anyway..."
+    fi
+    sleep 2
 done
+set -e  # Re-enable exit on error
 
-if [ "$API_READY" = "true" ]; then
-    echo_info "Grafana API is ready"
-    
-    # Verify Loki service exists
-    set +e  # Temporarily disable exit on error
-    if kubectl get svc loki -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
-        LOKI_SVC="loki"
-        LOKI_PORT="3100"
-    elif kubectl get svc loki-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
-        LOKI_SVC="loki-gateway"
-        LOKI_PORT="80"
+# Get Grafana credentials
+GRAFANA_PASSWORD=$(kubectl get secret -n $OBSERVABILITY_NAMESPACE prometheus-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "admin")
+
+# Create datasources directly via Grafana API (most reliable method)
+echo "Creating datasources via Grafana API (reliable method)..."
+
+# Start port-forward to Grafana in background
+kubectl port-forward -n $OBSERVABILITY_NAMESPACE svc/prometheus-grafana 3000:80 >/dev/null 2>&1 &
+PF_PID=$!
+sleep 3
+
+# Check if port-forward is working
+set +e  # Temporarily disable exit on error
+if ! kill -0 $PF_PID 2>/dev/null; then
+    echo_warn "Port-forward failed, retrying..."
+    kubectl port-forward -n $OBSERVABILITY_NAMESPACE svc/prometheus-grafana 3000:80 >/dev/null 2>&1 &
+    PF_PID=$!
+    sleep 3
+fi
+
+GRAFANA_URL="http://localhost:3000"
+GRAFANA_AUTH="admin:${GRAFANA_PASSWORD}"
+
+# Function to create or update a datasource
+create_datasource() {
+    local name="$1"
+    local type="$2"
+    local url="$3"
+    local uid="$4"
+    local is_default="${5:-false}"
+    local json_data="${6:-{}}"
+
+    # Check if datasource already exists
+    EXISTING=$(curl -s -u "$GRAFANA_AUTH" "$GRAFANA_URL/api/datasources/name/$name" 2>/dev/null)
+    if echo "$EXISTING" | grep -q '"id"'; then
+        echo "  Datasource '$name' already exists, updating..."
+        DS_ID=$(echo "$EXISTING" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+        curl -s -X PUT -u "$GRAFANA_AUTH" -H "Content-Type: application/json" \
+            "$GRAFANA_URL/api/datasources/$DS_ID" \
+            -d "{
+                \"id\": $DS_ID,
+                \"name\": \"$name\",
+                \"type\": \"$type\",
+                \"url\": \"$url\",
+                \"uid\": \"$uid\",
+                \"access\": \"proxy\",
+                \"isDefault\": $is_default,
+                \"jsonData\": $json_data
+            }" >/dev/null 2>&1
+        echo_info "  Updated datasource: $name"
     else
-        LOKI_SVC=""
-        echo_warn "Loki service not found, skipping Loki datasource configuration"
-    fi
-    set -e  # Re-enable exit on error
-    
-    # Verify Tempo service exists
-    set +e  # Temporarily disable exit on error
-    if kubectl get svc tempo -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
-        TEMPO_SVC="tempo"
-        TEMPO_PORT="3200"
-    elif kubectl get svc tempo-gateway -n $OBSERVABILITY_NAMESPACE >/dev/null 2>&1; then
-        TEMPO_SVC="tempo-gateway"
-        TEMPO_PORT="80"
-    else
-        TEMPO_SVC=""
-        echo_warn "Tempo service not found, skipping Tempo datasource configuration"
-    fi
-    set -e  # Re-enable exit on error
-    
-    # Configure Loki datasource
-    if [ -n "$LOKI_SVC" ]; then
-        echo "Configuring Loki datasource..."
-        LOKI_URL="http://${LOKI_SVC}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${LOKI_PORT}"
-        LOKI_JSON=$(cat <<EOF
-{
-  "name": "Loki",
-  "type": "loki",
-  "url": "${LOKI_URL}",
-  "access": "proxy",
-  "uid": "loki",
-  "editable": true,
-  "jsonData": {
-    "maxLines": 1000
-  }
-}
-EOF
-)
-        
-        # Check if Loki datasource already exists
-        EXISTING_LOKI=$(curl -s -u "admin:${GRAFANA_PASSWORD}" \
-            "http://localhost:${LOCAL_PORT}/api/datasources/name/Loki" 2>/dev/null)
-        
-        if echo "$EXISTING_LOKI" | grep -q '"id"'; then
-            # Update existing datasource
-            LOKI_ID=$(echo "$EXISTING_LOKI" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-            LOKI_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
-                -u "admin:${GRAFANA_PASSWORD}" \
-                -H "Content-Type: application/json" \
-                -d "${LOKI_JSON}" \
-                "http://localhost:${LOCAL_PORT}/api/datasources/${LOKI_ID}" 2>/dev/null)
-            LOKI_HTTP_CODE=$(echo "$LOKI_RESPONSE" | tail -n1)
-            if [ "$LOKI_HTTP_CODE" = "200" ]; then
-                echo_info "Loki datasource updated"
-            else
-                echo_warn "Failed to update Loki datasource (HTTP $LOKI_HTTP_CODE)"
-            fi
+        echo "  Creating datasource: $name..."
+        RESULT=$(curl -s -X POST -u "$GRAFANA_AUTH" -H "Content-Type: application/json" \
+            "$GRAFANA_URL/api/datasources" \
+            -d "{
+                \"name\": \"$name\",
+                \"type\": \"$type\",
+                \"url\": \"$url\",
+                \"uid\": \"$uid\",
+                \"access\": \"proxy\",
+                \"isDefault\": $is_default,
+                \"jsonData\": $json_data
+            }" 2>/dev/null)
+        if echo "$RESULT" | grep -q '"id"'; then
+            echo_info "  Created datasource: $name"
+        elif echo "$RESULT" | grep -q "already exists"; then
+            echo_info "  Datasource '$name' already exists"
         else
-            # Create new datasource
-            LOKI_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-                -u "admin:${GRAFANA_PASSWORD}" \
-                -H "Content-Type: application/json" \
-                -d "${LOKI_JSON}" \
-                "http://localhost:${LOCAL_PORT}/api/datasources" 2>/dev/null)
-            LOKI_HTTP_CODE=$(echo "$LOKI_RESPONSE" | tail -n1)
-            if [ "$LOKI_HTTP_CODE" = "200" ] || [ "$LOKI_HTTP_CODE" = "201" ]; then
-                echo_info "Loki datasource created"
-            else
-                echo_warn "Failed to create Loki datasource (HTTP $LOKI_HTTP_CODE)"
-                echo "Response: $(echo "$LOKI_RESPONSE" | head -n-1)"
-            fi
+            echo_warn "  Failed to create datasource '$name': $RESULT"
         fi
-    else
-        echo_warn "Skipping Loki datasource configuration (service not found)"
     fi
-    
-    # Configure Tempo datasource
-    if [ -n "$TEMPO_SVC" ]; then
-        echo "Configuring Tempo datasource..."
-        TEMPO_URL="http://${TEMPO_SVC}.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:${TEMPO_PORT}"
-        TEMPO_JSON=$(cat <<EOF
-{
-  "name": "Tempo",
-  "type": "tempo",
-  "url": "${TEMPO_URL}",
-  "access": "proxy",
-  "uid": "tempo",
-  "editable": true,
-  "jsonData": {
-    "httpMethod": "GET",
-    "serviceMap": {
-      "datasourceUid": "prometheus"
-    },
-    "nodeGraph": {
-      "enabled": true
-    },
-    "search": {
-      "hide": false
-    },
-    "tracesToLogs": {
-      "datasourceUid": "loki",
-      "tags": ["job", "instance", "pod", "namespace", "service.name"],
-      "mappedTags": [
+}
+
+# Determine service URLs (use detected values or defaults)
+PROMETHEUS_URL="http://prometheus-kube-prometheus-prometheus.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:9090"
+
+# Use detected LOKI_URL or fall back to default (Loki 3.0+ uses loki-gateway)
+if [ -z "$LOKI_URL" ]; then
+    LOKI_URL="http://loki-gateway.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:80"
+fi
+
+# Use detected TEMPO_URL or fall back to default
+if [ -z "$TEMPO_URL" ]; then
+    TEMPO_URL="http://tempo.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:3200"
+fi
+
+echo "Using datasource URLs:"
+echo "  Prometheus: $PROMETHEUS_URL"
+echo "  Loki: $LOKI_URL"
+echo "  Tempo: $TEMPO_URL"
+
+# Create Prometheus datasource (default)
+create_datasource "Prometheus" "prometheus" "$PROMETHEUS_URL" "prometheus" "true" '{"httpMethod":"POST","timeInterval":"15s"}'
+
+# Create Loki datasource with derivedFields for trace correlation
+LOKI_JSON_DATA='{
+    "maxLines": 1000,
+    "derivedFields": [
         {
-          "key": "service.name",
-          "value": "service"
+            "datasourceUid": "tempo",
+            "matcherRegex": "traceID=(\\w+)",
+            "name": "TraceID",
+            "url": "${__value.raw}"
         }
-      ],
-      "mapTagNamesEnabled": false,
-      "spanStartTimeShift": "1h",
-      "spanEndTimeShift": "1h",
-      "filterByTraceID": false,
-      "filterBySpanID": false
+    ]
+}'
+create_datasource "Loki" "loki" "$LOKI_URL" "loki" "false" "$LOKI_JSON_DATA"
+
+# Create Tempo datasource with trace-to-logs and trace-to-metrics correlation
+TEMPO_JSON_DATA='{
+    "httpMethod": "GET",
+    "serviceMap": {"datasourceUid": "prometheus"},
+    "nodeGraph": {"enabled": true},
+    "search": {"hide": false},
+    "tracesToLogs": {
+        "datasourceUid": "loki",
+        "tags": ["job", "instance", "pod", "namespace"],
+        "spanStartTimeShift": "1h",
+        "spanEndTimeShift": "1h",
+        "filterByTraceID": false,
+        "filterBySpanID": false
     },
     "tracesToMetrics": {
-      "datasourceUid": "prometheus",
-      "tags": [
-        {
-          "key": "service.name",
-          "value": "service"
-        },
-        {
-          "key": "job"
-        }
-      ],
-      "queries": [
-        {
-          "name": "Sample query",
-          "query": "sum(rate(tempo_spanmetrics_latency_bucket{\${__tags}}[5m]))"
-        }
-      ]
+        "datasourceUid": "prometheus",
+        "tags": [{"key": "service.name", "value": "service"}, {"key": "job"}]
     }
-  }
-}
-EOF
-)
-    
-    # Check if Tempo datasource already exists
-    EXISTING_TEMPO=$(curl -s -u "admin:${GRAFANA_PASSWORD}" \
-        "http://localhost:${LOCAL_PORT}/api/datasources/name/Tempo" 2>/dev/null)
-    
-    if echo "$EXISTING_TEMPO" | grep -q '"id"'; then
-        # Update existing datasource
-        TEMPO_ID=$(echo "$EXISTING_TEMPO" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-        TEMPO_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
-            -u "admin:${GRAFANA_PASSWORD}" \
-            -H "Content-Type: application/json" \
-            -d "${TEMPO_JSON}" \
-            "http://localhost:${LOCAL_PORT}/api/datasources/${TEMPO_ID}" 2>/dev/null)
-        TEMPO_HTTP_CODE=$(echo "$TEMPO_RESPONSE" | tail -n1)
-        if [ "$TEMPO_HTTP_CODE" = "200" ]; then
-            echo_info "Tempo datasource updated"
-        else
-            echo_warn "Failed to update Tempo datasource (HTTP $TEMPO_HTTP_CODE)"
-        fi
-    else
-        # Create new datasource
-        TEMPO_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            -u "admin:${GRAFANA_PASSWORD}" \
-            -H "Content-Type: application/json" \
-            -d "${TEMPO_JSON}" \
-            "http://localhost:${LOCAL_PORT}/api/datasources" 2>/dev/null)
-        TEMPO_HTTP_CODE=$(echo "$TEMPO_RESPONSE" | tail -n1)
-        if [ "$TEMPO_HTTP_CODE" = "200" ] || [ "$TEMPO_HTTP_CODE" = "201" ]; then
-            echo_info "Tempo datasource created"
-        else
-            echo_warn "Failed to create Tempo datasource (HTTP $TEMPO_HTTP_CODE)"
-            echo "Response: $(echo "$TEMPO_RESPONSE" | head -n-1)"
-        fi
-    fi
-    else
-        echo_warn "Skipping Tempo datasource configuration (service not found)"
-    fi
-    
-    # Kill port-forward
-    kill $GRAFANA_PF_PID 2>/dev/null || true
-    wait $GRAFANA_PF_PID 2>/dev/null || true
-    
-    if [ -n "$LOKI_SVC" ] || [ -n "$TEMPO_SVC" ]; then
-        echo_info "Grafana datasources configured"
-    else
-        echo_warn "No datasources were configured (services not found)"
-    fi
+}'
+create_datasource "Tempo" "tempo" "$TEMPO_URL" "tempo" "false" "$TEMPO_JSON_DATA"
+
+# Stop port-forward
+kill $PF_PID 2>/dev/null || true
+set -e  # Re-enable exit on error
+
+# Verify datasources were created
+echo ""
+echo "Verifying datasources..."
+kubectl port-forward -n $OBSERVABILITY_NAMESPACE svc/prometheus-grafana 3000:80 >/dev/null 2>&1 &
+PF_PID=$!
+sleep 2
+
+set +e
+DS_COUNT=$(curl -s -u "$GRAFANA_AUTH" "$GRAFANA_URL/api/datasources" 2>/dev/null | grep -o '"name"' | wc -l | tr -d ' ')
+if [ "$DS_COUNT" -ge 3 ]; then
+    echo_info "Successfully verified $DS_COUNT datasources in Grafana"
+    curl -s -u "$GRAFANA_AUTH" "$GRAFANA_URL/api/datasources" 2>/dev/null | grep -o '"name":"[^"]*"' | sed 's/"name":"//g; s/"//g' | while read ds; do
+        echo "  ✅ $ds"
+    done
 else
-    echo_warn "Grafana API not ready, skipping datasource configuration"
-    kill $GRAFANA_PF_PID 2>/dev/null || true
-    echo "You can configure datasources manually later:"
-    echo "  - Loki: http://loki.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:3100"
-    echo "  - Tempo: http://tempo.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:3200"
+    echo_warn "Could not verify all datasources (found: $DS_COUNT). They may still be provisioning."
+    echo "  You can check manually: curl -u admin:$GRAFANA_PASSWORD http://localhost:3000/api/datasources"
 fi
+kill $PF_PID 2>/dev/null || true
+set -e
+
+# Note: Dashboards are provisioned via Helm chart ConfigMaps (persistent)
+echo ""
+echo "Dashboards are provisioned via Helm chart ConfigMaps (persistent, survives restarts)"
+echo "  Dashboard ConfigMaps are deployed by Helm chart with label grafana_dashboard=1"
+echo "  Grafana will auto-discover them (sidecar.dashboards.enabled=true was set)"
 
 # Step 12: Display access information
 echo ""
@@ -1293,14 +2130,20 @@ GRAFANA_PASSWORD=$(kubectl get secret -n $OBSERVABILITY_NAMESPACE prometheus-gra
 echo "     Password: $GRAFANA_PASSWORD"
 echo "     (Or run: kubectl get secret -n $OBSERVABILITY_NAMESPACE prometheus-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
 echo ""
-echo "  4. Data sources configured automatically:"
+echo "  4. Data sources configured via Grafana API (persistent):"
 echo "     ✅ Prometheus: http://prometheus-kube-prometheus-prometheus.$OBSERVABILITY_NAMESPACE.svc.cluster.local:9090"
-echo "     ✅ Loki: http://loki.$OBSERVABILITY_NAMESPACE.svc.cluster.local:3100"
-echo "     ✅ Tempo: http://tempo.$OBSERVABILITY_NAMESPACE.svc.cluster.local:3200"
-echo "     (If datasources are missing, check Step 11 output above)"
+echo "     ✅ Loki: ${LOKI_URL:-http://loki-gateway.$OBSERVABILITY_NAMESPACE.svc.cluster.local:80}"
+echo "     ✅ Tempo: ${TEMPO_URL:-http://tempo.$OBSERVABILITY_NAMESPACE.svc.cluster.local:3200}"
+echo "     (Verify datasources: curl -u admin:$GRAFANA_PASSWORD http://localhost:3000/api/datasources)"
 echo ""
 echo "  5. View dashboards:"
-echo "     - Application dashboards should auto-discover from ConfigMaps with label grafana_dashboard=1"
+echo "     - Application dashboards are provisioned via Helm chart ConfigMaps (persistent)"
+echo "     - Dashboards auto-discover from ConfigMaps with label grafana_dashboard=1"
+echo "     - Check dashboards: kubectl get configmap -n $OBSERVABILITY_NAMESPACE -l grafana_dashboard=1"
+echo "     - Available dashboards:"
+echo "       * Metrics Dashboard (dashboard-metrics.json)"
+echo "       * Logs Dashboard (dashboard-logs.json)"
+echo "       * Traces Dashboard (dashboard-traces.json)"
 echo ""
 echo "📈 Prometheus (Metrics Query):"
 echo "  1. Port forward:"
@@ -1316,8 +2159,16 @@ echo ""
 echo "🔍 OTel Collector:"
 echo "  kubectl logs -n $OBSERVABILITY_NAMESPACE -l component=otel-collector --tail=50"
 echo ""
-echo "📝 Application Logs (via OTel Collector → Loki):"
-echo "  kubectl logs -n $APP_NAMESPACE -l app=$APP_NAME --tail=50"
+echo "📝 Log Collection:"
+echo "  - OTLP logs: Application → OTel Collector (deployment) → Loki"
+echo "  - stdout/stderr logs: Pods → Logging Operator → Fluent Bit/D → Loki"
+echo ""
+echo "  View application logs:"
+echo "    kubectl logs -n $APP_NAMESPACE -l app.kubernetes.io/name=$APP_NAME --tail=50"
+echo ""
+echo "  Check Logging Operator:"
+echo "    kubectl get pods -n logging"
+echo "    kubectl get logging,output,flow -n logging"
 echo ""
 echo "🔗 Application Access:"
 echo ""
@@ -1334,20 +2185,48 @@ echo "  Option 2: Via Traefik + Gateway API (if Traefik with Gateway API support
 if kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1 && kubectl get deployment -n traefik-system traefik >/dev/null 2>&1; then
     echo "    ✅ Traefik with Gateway API detected - HTTPRoute deployed automatically via Helm chart"
     echo ""
-    echo "    1. Port forward to Traefik Gateway:"
-    echo "       kubectl port-forward -n traefik-system svc/traefik 8080:80"
-    echo ""
-    echo "    2. Add hostname to /etc/hosts (one-time setup):"
-    echo "       echo \"127.0.0.1 dm-nkp-gitops-custom-app.local\" | sudo tee -a /etc/hosts"
-    echo ""
-    echo "    3. Access application via hostname:"
-    echo "       curl http://dm-nkp-gitops-custom-app.local/"
-    echo "       curl http://dm-nkp-gitops-custom-app.local/health"
-    echo "       curl http://dm-nkp-gitops-custom-app.local/ready"
-    echo ""
-    echo "    Note: If using NodePort in kind, you can also access directly via node IP:"
-    echo "      NODE_IP=\$(docker inspect ${CLUSTER_NAME}-control-plane --format='{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo \"localhost\")"
-    echo "      curl -H \"Host: dm-nkp-gitops-custom-app.local\" http://\${NODE_IP}:30080/"
+
+    # Check if MetalLB is installed and Traefik has LoadBalancer IP
+    TRAEFIK_SVC_TYPE=$(kubectl get svc traefik -n traefik-system -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+    TRAEFIK_LB_IP=$(kubectl get svc traefik -n traefik-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+    if [ "$TRAEFIK_SVC_TYPE" = "LoadBalancer" ] && [ -n "$TRAEFIK_LB_IP" ]; then
+        echo "    ✅ MetalLB LoadBalancer IP assigned: $TRAEFIK_LB_IP"
+        echo ""
+        echo "    1. Add hostname to /etc/hosts (one-time setup):"
+        echo "       echo \"$TRAEFIK_LB_IP dm-nkp-gitops-custom-app.local\" | sudo tee -a /etc/hosts"
+        echo ""
+        echo "    2. Access application via LoadBalancer IP and hostname:"
+        echo "       curl http://dm-nkp-gitops-custom-app.local/"
+        echo "       curl http://dm-nkp-gitops-custom-app.local/health"
+        echo "       curl http://dm-nkp-gitops-custom-app.local/ready"
+        echo ""
+        echo "       Or directly via LoadBalancer IP:"
+        echo "       curl -H \"Host: dm-nkp-gitops-custom-app.local\" http://$TRAEFIK_LB_IP/"
+    elif [ "$TRAEFIK_SVC_TYPE" = "LoadBalancer" ]; then
+        echo "    ✅ MetalLB installed - Traefik service is LoadBalancer type"
+        echo "    ⚠️  LoadBalancer IP not assigned yet (may take a moment)"
+        echo "    Check with: kubectl get svc traefik -n traefik-system"
+        echo ""
+        echo "    Fallback: Use port-forward until IP is assigned"
+        echo "       kubectl port-forward -n traefik-system svc/traefik 8080:80"
+    else
+        echo "    ⚠️  Traefik is using NodePort (MetalLB may not be installed)"
+        echo ""
+        echo "    1. Port forward to Traefik Gateway:"
+        echo "       kubectl port-forward -n traefik-system svc/traefik 8080:80"
+        echo ""
+        echo "    2. Add hostname to /etc/hosts (one-time setup):"
+        echo "       echo \"127.0.0.1 dm-nkp-gitops-custom-app.local\" | sudo tee -a /etc/hosts"
+        echo ""
+        echo "    3. Access application via hostname:"
+        echo "       curl http://dm-nkp-gitops-custom-app.local/"
+        echo ""
+        echo "    Or use NodePort directly:"
+        echo "      NODE_IP=\$(docker inspect ${CLUSTER_NAME}-control-plane --format='{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo \"localhost\")"
+        echo "      curl -H \"Host: dm-nkp-gitops-custom-app.local\" http://\${NODE_IP}:30080/"
+    fi
+
     echo ""
     echo "    Verify HTTPRoute status:"
     echo "      kubectl get httproute -n $APP_NAMESPACE"

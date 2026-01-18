@@ -49,7 +49,7 @@
         "legend": {"calcs": ["mean", "lastNotNull", "max"], "displayMode": "table", "placement": "bottom"},
         "tooltip": {"mode": "multi", "sort": "none"}
       },
-      "targets": [{"expr": "sum(rate(http_requests_total{service_name=\"$service_name\"}[5m]))", "legendFormat": "Total Request Rate", "refId": "A"}],
+      "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "legendFormat": "Total Request Rate", "refId": "A"}],
       "title": "HTTP Request Rate",
       "type": "timeseries"
     },
@@ -75,7 +75,7 @@
         "showThresholdMarkers": true
       },
       "pluginVersion": "8.0.0",
-      "targets": [{"expr": "http_active_connections{service_name=\"$service_name\"}", "legendFormat": "Active Connections", "refId": "A"}],
+      "targets": [{"expr": "http_active_connections", "legendFormat": "Active Connections", "refId": "A"}],
       "title": "Active HTTP Connections",
       "type": "gauge"
     },
@@ -113,10 +113,10 @@
         "tooltip": {"mode": "multi", "sort": "none"}
       },
       "targets": [
-        {"expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p50", "refId": "A"},
-        {"expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p95", "refId": "B"},
-        {"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p99", "refId": "C"},
-        {"expr": "rate(http_request_duration_seconds_sum{service_name=\"$service_name\"}[5m]) / rate(http_request_duration_seconds_count{service_name=\"$service_name\"}[5m])", "legendFormat": "Average", "refId": "D"}
+        {"expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99", "refId": "C"},
+        {"expr": "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])", "legendFormat": "Average", "refId": "D"}
       ],
       "title": "HTTP Request Duration (Percentiles)",
       "type": "timeseries"
@@ -153,9 +153,9 @@
         "tooltip": {"mode": "multi", "sort": "none"}
       },
       "targets": [
-        {"expr": "histogram_quantile(0.50, rate(http_response_size_bytes_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p50", "refId": "A"},
-        {"expr": "histogram_quantile(0.90, rate(http_response_size_bytes_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p90", "refId": "B"},
-        {"expr": "histogram_quantile(0.99, rate(http_response_size_bytes_bucket{service_name=\"$service_name\"}[5m]))", "legendFormat": "p99", "refId": "C"}
+        {"expr": "histogram_quantile(0.50, rate(http_response_size_bytes_bucket[5m]))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.90, rate(http_response_size_bytes_bucket[5m]))", "legendFormat": "p90", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, rate(http_response_size_bytes_bucket[5m]))", "legendFormat": "p99", "refId": "C"}
       ],
       "title": "HTTP Response Size",
       "type": "timeseries"
@@ -191,7 +191,7 @@
         "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "bottom"},
         "tooltip": {"mode": "multi", "sort": "none"}
       },
-      "targets": [{"expr": "rate(http_requests_by_method_total{service_name=\"$service_name\"}[5m])", "legendFormat": "{{method}} {{status}}", "refId": "A"}],
+      "targets": [{"expr": "rate(http_requests_by_method_total[5m])", "legendFormat": "{{method}} {{status}}", "refId": "A"}],
       "title": "HTTP Requests by Method and Status",
       "type": "timeseries"
     },
@@ -214,7 +214,7 @@
         "showHeader": true
       },
       "pluginVersion": "8.0.0",
-      "targets": [{"expr": "business_metric_value{service_name=\"$service_name\"}", "format": "table", "instant": true, "legendFormat": "{{type}}", "refId": "A"}],
+      "targets": [{"expr": "business_metric_value", "format": "table", "instant": true, "legendFormat": "{{type}}", "refId": "A"}],
       "title": "Business Metrics",
       "transformations": [{
         "id": "organize",

@@ -1,0 +1,61 @@
+{{- if and .Values.tls.enabled .Values.tls.certificate.create }}
+# TLS Certificate for Observability Stack (cert-manager)
+# ⚠️ LOCAL TESTING ONLY
+#
+# This certificate is for observability services hostname
+# It uses the ClusterIssuer created by the dm-nkp-gitops-custom-app chart
+#
+# Let's Encrypt certificates are FREE and valid for 90 days
+# cert-manager auto-renews 15 days before expiry
+#
+# Troubleshooting:
+#   kubectl describe certificate {{ include "observability-stack.fullname" . }}-tls -n {{ .Release.Namespace }}
+#   kubectl get certificaterequest -n {{ .Release.Namespace }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+spec:
+  # Secret name where certificate will be stored
+  secretName: {{ .Values.tls.certificate.secretName }}
+  
+  # Certificate validity duration
+  duration: {{ .Values.tls.certificate.duration | default "2160h" }}
+  
+  # Renew certificate before expiry
+  renewBefore: {{ .Values.tls.certificate.renewBefore | default "360h" }}
+  
+  # Reference to ClusterIssuer (created by app chart)
+  issuerRef:
+    name: {{ .Values.tls.certificate.issuerRef.name }}
+    kind: {{ .Values.tls.certificate.issuerRef.kind | default "ClusterIssuer" }}
+    group: cert-manager.io
+  
+  # Common name for the certificate
+  commonName: {{ .Values.gateway.hostname }}
+  
+  # DNS names (Subject Alternative Names)
+  dnsNames:
+    {{- if .Values.tls.certificate.dnsNames }}
+    {{- range .Values.tls.certificate.dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- else }}
+    - {{ .Values.gateway.hostname | quote }}
+    {{- end }}
+  
+  # Private key settings
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  
+  # Certificate usages
+  usages:
+    - server auth
+    - client auth
+{{- end }}

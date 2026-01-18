@@ -127,11 +127,11 @@ grafana:
       enabled: true  # Enable cluster-wide footprint dashboard for aggregated cluster view
       folder: "/Platform"  # Grafana folder for cluster dashboards (same as platform dashboards)
   
-  # Datasources Configuration - Typically pre-configured by platform team in NKP
-  # kube-prometheus-stack typically auto-configures Prometheus datasource
-  # Datasources from ConfigMap may not be needed if platform team configures via Helm values
+  # Datasources Configuration - Enable datasources for NKP production
+  # kube-prometheus-stack may auto-configure Prometheus datasource, but we ensure all datasources are configured
+  # This ensures Prometheus, Loki, and Tempo datasources are always available for dashboards
   datasources:
-    enabled: false  # Platform team should configure datasources in production (via kube-prometheus-stack Helm values)
+    enabled: true  # Enable datasources for NKP production (ensures all dashboards work correctly)
     namespace: "monitoring"  # Same as Grafana namespace
     prometheus:
       enabled: true

@@ -1,0 +1,70 @@
+# Certificate resource for Gateway TLS termination
+# cert-manager will automatically issue and renew certificates from Let's Encrypt
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gateway-tls-cert
+  namespace: traefik-system
+spec:
+  # Secret name where the certificate will be stored
+  # This must match the certificateRefs in Gateway spec
+  secretName: gateway-tls-cert
+  
+  # Duration and renewal settings
+  duration: 2160h    # 90 days
+  renewBefore: 360h  # Renew 15 days before expiry
+  
+  # Use Let's Encrypt staging for testing, prod for production
+  issuerRef:
+    name: letsencrypt-staging  # Change to letsencrypt-prod for production
+    kind: ClusterIssuer
+    group: cert-manager.io
+  
+  # Certificate details
+  commonName: dm-nkp-gitops-custom-app.local
+  
+  # Add all hostnames that need to be covered
+  dnsNames:
+    - dm-nkp-gitops-custom-app.local
+    - observability.local
+  
+  # Private key settings
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  
+  # Usage settings
+  usages:
+    - server auth
+    - client auth
+---
+# Application-specific certificate (optional - use if different from gateway cert)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: app-tls-cert
+  namespace: default
+spec:
+  secretName: dm-nkp-gitops-custom-app-tls
+  duration: 2160h
+  renewBefore: 360h
+  
+  issuerRef:
+    name: letsencrypt-staging  # Change to letsencrypt-prod for production
+    kind: ClusterIssuer
+    group: cert-manager.io
+  
+  commonName: dm-nkp-gitops-custom-app.local
+  dnsNames:
+    - dm-nkp-gitops-custom-app.local
+  
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  
+  usages:
+    - server auth
+    - client auth

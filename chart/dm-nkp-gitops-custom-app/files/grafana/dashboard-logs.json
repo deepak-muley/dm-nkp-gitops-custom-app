@@ -12,6 +12,7 @@
       }
     ]
   },
+  "description": "Application logs via OTLP (OTel SDK) - Loki 3.0+ with native OTLP support",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
@@ -19,130 +20,186 @@
   "links": [],
   "panels": [
     {
-      "datasource": "Loki",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "All application logs sent via OTLP (OTel SDK → OTel Collector → Loki)",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
+        "prettifyLogMessage": true,
+        "showCommonLabels": true,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
-        "wrapLogMessage": false
+        "wrapLogMessage": true
       },
-      "targets": [{
-        "expr": "{app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"}",
-        "refId": "A",
-        "legendFormat": "Application Logs"
-      }],
-      "title": "Application Logs",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service_name=\"dm-nkp-gitops-custom-app\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Application Logs (OTLP)",
       "type": "logs"
     },
     {
-      "datasource": "Loki",
+      "datasource": {"type": "loki", "uid": "loki"},
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false
+          },
           "mappings": [],
           "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "logs"
+          "unit": "short"
         }
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
       "id": 2,
       "options": {
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
+        "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
       },
-      "targets": [{
-        "expr": "sum(count_over_time({app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"}[1m]))",
-        "refId": "A",
-        "legendFormat": "Logs per minute"
-      }],
-      "title": "Log Volume",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\"}[1m]))",
+          "refId": "A",
+          "legendFormat": "Total Logs"
+        }
+      ],
+      "title": "Log Volume (per minute)",
       "type": "timeseries"
     },
     {
-      "datasource": "Loki",
+      "datasource": {"type": "loki", "uid": "loki"},
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false
+          },
           "mappings": [],
           "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Errors"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "Warnings"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "Info"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
       "id": 3,
       "options": {
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
+        "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
       },
-      "targets": [{
-        "expr": "sum(count_over_time({app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"} |= \"ERROR\" [1m]))",
-        "refId": "A",
-        "legendFormat": "Error Logs"
-      }, {
-        "expr": "sum(count_over_time({app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"} |= \"WARN\" [1m]))",
-        "refId": "B",
-        "legendFormat": "Warning Logs"
-      }, {
-        "expr": "sum(count_over_time({app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"} |= \"INFO\" [1m]))",
-        "refId": "C",
-        "legendFormat": "Info Logs"
-      }],
-      "title": "Log Levels",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\", detected_level=\"error\"}[1m]))",
+          "refId": "A",
+          "legendFormat": "Errors"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\", detected_level=\"warn\"}[1m]))",
+          "refId": "B",
+          "legendFormat": "Warnings"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\", detected_level=\"info\"}[1m]))",
+          "refId": "C",
+          "legendFormat": "Info"
+        }
+      ],
+      "title": "Log Levels (per minute)",
       "type": "timeseries"
     },
     {
-      "datasource": "Loki",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "Error logs (severity_text=ERROR or detected_level=error)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
       "id": 4,
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
+        "prettifyLogMessage": true,
+        "showCommonLabels": true,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
-        "wrapLogMessage": false
+        "wrapLogMessage": true
       },
-      "targets": [{
-        "expr": "{app_kubernetes_io_name=\"dm-nkp-gitops-custom-app\"} |= \"ERROR\"",
-        "refId": "A",
-        "legendFormat": "Error Logs"
-      }],
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service_name=\"dm-nkp-gitops-custom-app\", detected_level=\"error\"}",
+          "refId": "A"
+        }
+      ],
       "title": "Error Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "Warning logs (severity_text=WARN or detected_level=warn)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "id": 5,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": true,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service_name=\"dm-nkp-gitops-custom-app\", detected_level=\"warn\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Warning Logs",
       "type": "logs"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["dm-nkp-gitops-custom-app", "loki", "logs"],
+  "tags": ["dm-nkp-gitops-custom-app", "loki", "logs", "otlp"],
   "templating": {"list": []},
   "time": {"from": "now-15m", "to": "now"},
   "timepicker": {},

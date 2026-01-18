@@ -180,6 +180,8 @@ func Initialize() error {
 	UpdateActiveConnections(0)
 	UpdateBusinessMetric("demo", 42.0)
 
+	// Note: Use log.Printf here since telemetry logger may not be initialized yet
+	// This is called during application startup before telemetry logger is ready
 	log.Printf("OpenTelemetry metrics initialized with endpoint: %s", otlpEndpoint)
 	return nil
 }

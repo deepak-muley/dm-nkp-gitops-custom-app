@@ -691,6 +691,21 @@ setup-gateway-api-helm: ## Set up Gateway API with Traefik using Helm
 	fi
 	./scripts/setup-gateway-api-helm.sh
 
+setup-metallb-helm: ## Set up MetalLB using Helm chart (for local testing with LoadBalancer services)
+	@if ! command -v helm > /dev/null; then \
+		echo "helm is not installed. Install it from https://helm.sh/"; \
+		exit 1; \
+	fi
+	@if ! command -v kubectl > /dev/null; then \
+		echo "kubectl is not installed"; \
+		exit 1; \
+	fi
+	@if ! command -v docker > /dev/null; then \
+		echo "docker is not installed"; \
+		exit 1; \
+	fi
+	./scripts/setup-metallb-helm.sh
+
 kill-port-forwards: ## Kill processes using common port-forward ports (use PORTS=3000,9090 for specific ports, or --all for all common ports)
 	@./scripts/kill-port-forwards.sh $(if $(PORTS),$(PORTS),--all)
 

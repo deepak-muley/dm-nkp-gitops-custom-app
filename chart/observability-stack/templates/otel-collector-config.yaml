@@ -25,26 +25,23 @@ data:
       prometheus:
         endpoint: "0.0.0.0:8889"
       {{- if .Values.otel-collector.logs.enabled }}
-      # Export logs to Loki
+      # Export logs to Loki 3.0+ via native OTLP endpoint
       # ⚠️  NOTE: Only enable if Logging Operator is NOT collecting logs
       # If Logging Operator (Fluent Bit/D) is deployed by platform team,
       # disable this to avoid duplicate log collection and storage
-      loki:
-        endpoint: {{ if .Values.otel-collector.logs.lokiEndpoint }}{{ .Values.otel-collector.logs.lokiEndpoint }}{{ else }}http://{{ include "observability-stack.fullname" . }}-loki:3100/loki/api/v1/push{{ end }}
-        labels:
-          resource:
-            service.name: "service_name"
-            service.namespace: "service_namespace"
+      # Loki 3.0+ supports native OTLP ingestion at /otlp endpoint
+      otlphttp/loki:
+        endpoint: {{ if .Values.otel-collector.logs.lokiEndpoint }}{{ .Values.otel-collector.logs.lokiEndpoint }}{{ else }}http://loki-gateway.{{ .Release.Namespace }}.svc.cluster.local:80/otlp{{ end }}
+        tls:
+          insecure: true
       {{- end }}
       # Export traces to Tempo
       # For local testing, reference Tempo service in same namespace
       # In production, platform team pre-deploys Tempo
       otlp/tempo:
-        endpoint: {{ include "observability-stack.fullname" . }}-tempo:4317
+        endpoint: {{ if .Values.otel-collector.traces.tempoEndpoint }}{{ .Values.otel-collector.traces.tempoEndpoint }}{{ else }}tempo.{{ .Release.Namespace }}.svc.cluster.local:4317{{ end }}
         tls:
           insecure: true
-      # Alternative: If Tempo is deployed separately via Helm chart
-      # endpoint: tempo:4317
     
     service:
       pipelines:
@@ -60,9 +57,10 @@ data:
         # Log pipeline: Only enabled if Logging Operator is NOT handling logs
         # If platform team deploys Logging Operator, this should be disabled
         # to prevent duplicate log collection from stdout/stderr
+        # Uses otlphttp/loki exporter for Loki 3.0+ native OTLP support
         logs:
           receivers: [otlp]
           processors: [batch]
-          exporters: [loki]
+          exporters: [otlphttp/loki]
         {{- end }}
 {{- end }}

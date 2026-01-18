@@ -1,0 +1,45 @@
+# Let's Encrypt ClusterIssuers for cert-manager
+# These issuers can be used across all namespaces
+# Use staging for testing, production for real certificates
+---
+# Staging Issuer (for testing - has relaxed rate limits)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Staging server (use for testing to avoid rate limits)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@example.com  # Replace with your email
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+    # HTTP-01 Challenge - works with Traefik Gateway
+    - http01:
+        gatewayHTTPRoute:
+          parentRefs:
+            - name: traefik
+              namespace: traefik-system
+              kind: Gateway
+---
+# Production Issuer (for real certificates)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com  # Replace with your email
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    # HTTP-01 Challenge - works with Traefik Gateway
+    - http01:
+        gatewayHTTPRoute:
+          parentRefs:
+            - name: traefik
+              namespace: traefik-system
+              kind: Gateway

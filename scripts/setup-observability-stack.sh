@@ -31,11 +31,12 @@ helm repo update
 
 # Install Prometheus (via kube-prometheus-stack which includes Grafana)
 echo "Installing Prometheus and Grafana via kube-prometheus-stack..."
-# Note: If upgrade fails due to CRD schema issues (e.g., ServiceMonitor schema mismatch),
-# you may need to uninstall and reinstall: helm uninstall prometheus -n ${NAMESPACE}
+# Handle CRD version mismatch by automatically uninstalling and reinstalling if needed
 INSTALL_ERROR_FILE="/tmp/prometheus-install-$$.log"
 if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
   --namespace ${NAMESPACE} \
+  --create-namespace \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
   --set prometheus.prometheusSpec.retention=30d \
   --set grafana.adminPassword=admin \
   --wait 2>&1 | tee "$INSTALL_ERROR_FILE"; then
@@ -45,18 +46,50 @@ else
   INSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
   if echo "$INSTALL_ERROR" | grep -q "field not declared in schema"; then
     echo "Warning: Upgrade failed due to CRD schema mismatch (ServiceMonitor CRD version incompatibility)"
-    echo "Automatically uninstalling and reinstalling to fix CRD version mismatch..."
+    echo "Automatically uninstalling and cleaning up CRDs to fix version mismatch..."
     helm uninstall prometheus -n ${NAMESPACE} 2>/dev/null || true
+    sleep 3
+    # Delete problematic ServiceMonitor resources that might have incompatible fields
+    echo "Cleaning up ServiceMonitor resources with incompatible schema..."
+    kubectl delete servicemonitor -n ${NAMESPACE} --all --ignore-not-found=true 2>/dev/null || true
+    kubectl delete prometheusrule -n ${NAMESPACE} --all --ignore-not-found=true 2>/dev/null || true
+    # Wait for resources to be fully deleted
     sleep 5
-    # Reinstall with fresh CRDs
+    # Reinstall with fresh CRDs (Helm will install updated CRDs)
+    echo "Reinstalling Prometheus with fresh CRDs..."
     if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
       --namespace ${NAMESPACE} \
+      --create-namespace \
+      --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
       --set prometheus.prometheusSpec.retention=30d \
       --set grafana.adminPassword=admin \
-      --wait; then
+      --wait 2>&1 | tee "$INSTALL_ERROR_FILE"; then
       echo "Prometheus reinstalled successfully after CRD fix"
+      rm -f "$INSTALL_ERROR_FILE"
     else
-      echo "Warning: Prometheus reinstallation had issues"
+      REINSTALL_ERROR=$(cat "$INSTALL_ERROR_FILE" 2>/dev/null || echo "")
+      if echo "$REINSTALL_ERROR" | grep -q "field not declared in schema"; then
+        echo "Warning: Still seeing CRD schema issues. Deleting CRDs and retrying..."
+        # Delete the CRDs themselves if they're still causing issues
+        kubectl delete crd servicemonitors.monitoring.coreos.com --ignore-not-found=true 2>/dev/null || true
+        kubectl delete crd prometheusrules.monitoring.coreos.com --ignore-not-found=true 2>/dev/null || true
+        sleep 5
+        # Final reinstall - Helm will install fresh CRDs
+        if helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+          --namespace ${NAMESPACE} \
+          --create-namespace \
+          --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+          --set prometheus.prometheusSpec.retention=30d \
+          --set grafana.adminPassword=admin \
+          --wait; then
+          echo "Prometheus reinstalled successfully after CRD deletion"
+        else
+          echo "Warning: Prometheus reinstallation still had issues"
+        fi
+      else
+        echo "Warning: Prometheus reinstallation had issues: $(echo "$REINSTALL_ERROR" | head -3)"
+      fi
+      rm -f "$INSTALL_ERROR_FILE"
     fi
   else
     echo "Warning: Prometheus installation had issues: $(echo "$INSTALL_ERROR" | head -3)"
@@ -68,23 +101,32 @@ fi
 echo "Installing Loki for logs..."
 # Note: grafana/loki-stack is deprecated, using loki-simple-scalable for local/testing clusters
 # loki-simple-scalable works better for single-node kind clusters (no anti-affinity issues)
+# First, uninstall any existing Loki to avoid conflicts
+helm uninstall loki -n ${NAMESPACE} 2>/dev/null || true
+sleep 2
+
 if helm upgrade --install loki grafana/loki-simple-scalable \
   --namespace ${NAMESPACE} \
   --set singleBinary.replicas=1 \
   --wait; then
   echo "Loki installed successfully (using loki-simple-scalable)"
 else
-  echo "Warning: loki-simple-scalable installation had issues, trying loki-distributed with anti-affinity disabled..."
-  # Fallback: try loki-distributed with anti-affinity disabled for single-node clusters
+  echo "Warning: loki-simple-scalable installation had issues, trying loki-distributed with single replicas..."
+  # Fallback: try loki-distributed with all replicas set to 1 for single-node clusters
+  # Also need to set backend storage replicas to 1 and disable all anti-affinity
   if helm upgrade --install loki grafana/loki-distributed \
     --namespace ${NAMESPACE} \
     --set loki.read.replicas=1 \
     --set loki.write.replicas=1 \
-    --set loki.read.affinity='' \
-    --set loki.write.affinity='' \
-    --set loki.backend.affinity='' \
+    --set loki.backend.replicas=1 \
+    --set loki.read.affinity=null \
+    --set loki.write.affinity=null \
+    --set loki.backend.affinity=null \
+    --set loki.read.podAntiAffinity=null \
+    --set loki.write.podAntiAffinity=null \
+    --set loki.backend.podAntiAffinity=null \
     --wait; then
-    echo "Loki installed successfully (using loki-distributed with anti-affinity disabled)"
+    echo "Loki installed successfully (using loki-distributed with single replicas)"
   else
     echo "Warning: Loki installation failed with both charts"
     echo "Loki is required for logs. Please install manually."

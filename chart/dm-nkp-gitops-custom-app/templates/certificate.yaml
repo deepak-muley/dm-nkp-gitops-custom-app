@@ -1,0 +1,67 @@
+{{- if and .Values.tls.enabled .Values.tls.certificate.create }}
+# TLS Certificate for application (cert-manager)
+# cert-manager will automatically:
+#   1. Request certificate from Let's Encrypt
+#   2. Complete HTTP-01 challenge
+#   3. Store certificate in Kubernetes Secret
+#   4. Renew certificate before expiry
+#
+# Let's Encrypt certificates are FREE and valid for 90 days
+# cert-manager auto-renews 15 days before expiry (configurable)
+#
+# Troubleshooting:
+#   kubectl describe certificate {{ include "dm-nkp-gitops-custom-app.fullname" . }}-tls -n {{ .Release.Namespace }}
+#   kubectl get certificaterequest -n {{ .Release.Namespace }}
+#   kubectl describe secret {{ .Values.tls.certificate.secretName }} -n {{ .Release.Namespace }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "dm-nkp-gitops-custom-app.fullname" . }}-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dm-nkp-gitops-custom-app.labels" . | nindent 4 }}
+spec:
+  # Secret name where certificate will be stored
+  # This secret contains tls.crt and tls.key
+  secretName: {{ .Values.tls.certificate.secretName }}
+  
+  # Certificate validity duration
+  duration: {{ .Values.tls.certificate.duration | default "2160h" }}
+  
+  # Renew certificate before expiry
+  renewBefore: {{ .Values.tls.certificate.renewBefore | default "360h" }}
+  
+  # Reference to ClusterIssuer
+  issuerRef:
+    name: {{ .Values.tls.certificate.issuerRef.name | default .Values.tls.clusterIssuer.name }}
+    kind: {{ .Values.tls.certificate.issuerRef.kind | default "ClusterIssuer" }}
+    group: cert-manager.io
+  
+  # Common name for the certificate
+  commonName: {{ first .Values.tls.certificate.dnsNames | default (first .Values.gateway.hostnames) }}
+  
+  # DNS names (Subject Alternative Names)
+  # All hostnames that should be covered by this certificate
+  dnsNames:
+    {{- if .Values.tls.certificate.dnsNames }}
+    {{- range .Values.tls.certificate.dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- else }}
+    {{- range .Values.gateway.hostnames }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- end }}
+  
+  # Private key settings
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  
+  # Certificate usages
+  usages:
+    - server auth
+    - client auth
+{{- end }}

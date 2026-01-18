@@ -125,6 +125,62 @@ gateway:
   hostnames:
     - "dm-nkp-gitops-custom-app.local"  # Hostnames for this HTTPRoute (update for production)
 
+# TLS Configuration - Let's Encrypt with cert-manager
+# ⚠️ PREREQUISITE: cert-manager must be installed in the cluster
+#    NKP Platform: cert-manager is typically pre-installed
+#    Local Testing: Install via: helm install cert-manager jetstack/cert-manager --set installCRDs=true
+# 
+# Let's Encrypt is FREE for all certificates (no paid tier)
+# See docs/lets-encrypt-gateway-api-setup.md for details
+tls:
+  enabled: true  # Enable TLS/HTTPS configuration
+  
+  # ClusterIssuer Configuration - Creates Let's Encrypt ClusterIssuer
+  # ClusterIssuer is cluster-wide (not namespaced) - only create once per cluster
+  # Set create: false if platform team already created a ClusterIssuer
+  clusterIssuer:
+    create: true  # Set to false if ClusterIssuer already exists in cluster
+    # Name of the ClusterIssuer to create/use
+    # Common names: "letsencrypt-prod", "letsencrypt-staging"
+    name: "letsencrypt-prod"
+    # Email for Let's Encrypt notifications (certificate expiry warnings)
+    # This email is used for Let's Encrypt account registration and expiry notifications
+    # Let's Encrypt automatically creates an ACME account on first certificate request
+    # No need to create an account manually - cert-manager handles it
+    email: "deepak.muley@gmail.com"  # ⚠️ UPDATE if using different email
+    # ACME server - staging for testing, prod for real certificates
+    # Staging: https://acme-staging-v02.api.letsencrypt.org/directory (untrusted certs, high rate limits)
+    # Production: https://acme-v02.api.letsencrypt.org/directory (trusted certs, rate limited)
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+    # Private key secret name for ACME account
+    privateKeySecretRef: "letsencrypt-prod-account-key"
+    # HTTP-01 solver configuration (uses Gateway API)
+    solvers:
+      http01:
+        gatewayHTTPRoute:
+          parentRefs:
+            name: "traefik"
+            namespace: "traefik-system"
+  
+  # Certificate Configuration - Creates TLS Certificate for app hostnames
+  certificate:
+    create: true  # Create Certificate resource for this app
+    # Secret name where cert-manager stores the TLS certificate
+    # This secret can be referenced by Gateway or Ingress
+    secretName: "dm-nkp-gitops-custom-app-tls"
+    # Certificate duration (default 90 days for Let's Encrypt)
+    duration: "2160h"  # 90 days
+    # Renew certificate before expiry (default 15 days before)
+    renewBefore: "360h"  # 15 days
+    # Issuer reference - must match clusterIssuer.name above
+    issuerRef:
+      name: "letsencrypt-prod"
+      kind: "ClusterIssuer"
+    # DNS names for the certificate (should match gateway.hostnames)
+    # cert-manager will request certificate for these domains
+    dnsNames:
+      - "dm-nkp-gitops-custom-app.local"
+
 resources:
   limits:
     cpu: 200m

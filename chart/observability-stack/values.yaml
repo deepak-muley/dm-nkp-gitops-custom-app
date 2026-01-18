@@ -24,8 +24,12 @@ otel-collector:
   # In local testing without Logging Operator: set to true
   logs:
     enabled: true  # Set to false if platform team deploys Logging Operator
-    # Loki endpoint for logs (only used if logs.enabled=true)
-    lokiEndpoint: ""  # If empty, uses local Loki service in same namespace
+    # Loki OTLP endpoint for logs (only used if logs.enabled=true)
+    # Loki 3.0+ supports native OTLP at /otlp endpoint
+    lokiEndpoint: ""  # If empty, uses http://loki-gateway.<namespace>.svc.cluster.local:80/otlp
+  # Trace collection configuration  
+  traces:
+    tempoEndpoint: ""  # If empty, uses tempo.<namespace>.svc.cluster.local:4317
 
 prometheus:
   enabled: true
@@ -56,10 +60,86 @@ grafana:
   datasources:
     prometheus:
       enabled: true
-      url: http://prometheus-server:80
+      # For kube-prometheus-stack: prometheus-kube-prometheus-prometheus:9090
+      url: http://prometheus-kube-prometheus-prometheus:9090
     loki:
       enabled: true
-      url: http://loki:3100
+      # For Loki 3.0+ (grafana/loki chart with gateway): loki-gateway:80
+      url: http://loki-gateway:80
     tempo:
       enabled: true
+      # For Tempo: tempo:3200
       url: http://tempo:3200
+
+# Gateway API Configuration (HTTPRoute for path-based routing)
+# Note: MetalLB should already be present in NKP platform (no need to install)
+# All services will be accessible via the same external entrypoint with different paths
+gateway:
+  enabled: false  # Set to true to enable HTTPRoute resources
+  # Gateway resource creation (for local testing only)
+  # In NKP production, Gateway is pre-deployed by platform team - set create: false
+  create: true  # Set to false in NKP production (Gateway already exists)
+  gatewayClassName: "traefik"  # GatewayClass name (Traefik creates this)
+  parentRef:
+    name: "traefik"  # Gateway name (verify: kubectl get gateway -A)
+    namespace: "traefik-system"  # Gateway namespace (verify in your cluster)
+  hostname: "observability.local"  # External hostname for all services
+  # Service names must match the actual service names in your cluster
+  # For kube-prometheus-stack: typically <release-name>-kube-prometheus-prometheus
+  # For Grafana: typically <release-name>-grafana or grafana
+  # Verify service names: kubectl get svc -A | grep -E "(grafana|prometheus|loki|tempo)"
+  services:
+    grafana:
+      name: "grafana"  # Update to match your Grafana service name
+      namespace: ""  # Empty = same as Release namespace
+      port: 3000
+      path: "/grafana"  # Path prefix for Grafana (requires Grafana root_url configuration)
+    prometheus:
+      name: "prometheus-server"  # Update to match your Prometheus service name
+      namespace: ""  # Empty = same as Release namespace
+      port: 80  # Common port for Prometheus (may be 9090 for direct Prometheus)
+      path: "/prometheus"  # Path prefix for Prometheus
+    loki:
+      name: "loki-gateway"  # Loki 3.0+ gateway service name
+      namespace: ""  # Empty = same as Release namespace
+      port: 80  # Gateway port
+      path: "/loki"  # Path prefix for Loki
+    tempo:
+      name: "tempo"  # Update to match your Tempo service name
+      namespace: ""  # Empty = same as Release namespace
+      port: 3200
+      path: "/tempo"  # Path prefix for Tempo
+    otelCollector:
+      enabled: true  # Enable OTel Collector HTTPRoute
+      path: "/otel-collector"  # Path prefix for OTel Collector
+      # OTel Collector will use service from otel-collector section above
+
+# TLS Configuration - Let's Encrypt with cert-manager (Local Testing)
+# ⚠️ LOCAL TESTING ONLY: For local development environments (kind, minikube)
+# In NKP production, use the app chart (dm-nkp-gitops-custom-app) for ClusterIssuer
+#
+# Let's Encrypt is FREE for all certificates - no paid tier exists
+# Certificates are valid for 90 days and auto-renewed by cert-manager
+#
+# ⚠️ PREREQUISITE: cert-manager must be installed
+#    Local: helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set installCRDs=true
+tls:
+  enabled: false  # Set to true to enable TLS for local testing
+  
+  # Certificate Configuration - Creates TLS Certificate for observability hostname
+  certificate:
+    create: true  # Create Certificate resource
+    # Secret name where cert-manager stores the TLS certificate
+    secretName: "observability-tls"
+    # Certificate duration (default 90 days for Let's Encrypt)
+    duration: "2160h"  # 90 days
+    # Renew certificate before expiry
+    renewBefore: "360h"  # 15 days
+    # Issuer reference - use ClusterIssuer from app chart
+    issuerRef:
+      # Use the ClusterIssuer created by dm-nkp-gitops-custom-app chart
+      name: "letsencrypt-prod"
+      kind: "ClusterIssuer"
+    # DNS names for the certificate
+    dnsNames:
+      - "observability.local"

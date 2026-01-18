@@ -42,7 +42,7 @@
         "wrapLogMessage": false
       },
       "targets": [{
-        "expr": "{app=\"dm-nkp-gitops-custom-app\"}",
+        "expr": "{job=~\"dm-nkp.*|otel.*\"} |= \"\"",
         "refId": "A",
         "legendFormat": "Application Logs"
       }],
@@ -67,7 +67,7 @@
         "tooltip": {"mode": "single", "sort": "none"}
       },
       "targets": [{
-        "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\"}[1m]))",
+        "expr": "sum(count_over_time({job=~\"dm-nkp.*|otel.*\"}[1m]))",
         "refId": "A",
         "legendFormat": "Logs per minute"
       }],
@@ -92,15 +92,15 @@
         "tooltip": {"mode": "single", "sort": "none"}
       },
       "targets": [{
-        "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\"} |= \"ERROR\" [1m]))",
+        "expr": "sum(count_over_time({job=~\"dm-nkp.*|otel.*\"} |= \"ERROR\" [1m]))",
         "refId": "A",
         "legendFormat": "Error Logs"
       }, {
-        "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\"} |= \"WARN\" [1m]))",
+        "expr": "sum(count_over_time({job=~\"dm-nkp.*|otel.*\"} |= \"WARN\" [1m]))",
         "refId": "B",
         "legendFormat": "Warning Logs"
       }, {
-        "expr": "sum(count_over_time({service_name=\"dm-nkp-gitops-custom-app\"} |= \"INFO\" [1m]))",
+        "expr": "sum(count_over_time({job=~\"dm-nkp.*|otel.*\"} |= \"INFO\" [1m]))",
         "refId": "C",
         "legendFormat": "Info Logs"
       }],
@@ -131,7 +131,7 @@
         "wrapLogMessage": false
       },
       "targets": [{
-        "expr": "{service_name=\"dm-nkp-gitops-custom-app\"} |= \"ERROR\"",
+        "expr": "{job=~\"dm-nkp.*|otel.*\"} |= \"ERROR\"",
         "refId": "A",
         "legendFormat": "Error Logs"
       }],

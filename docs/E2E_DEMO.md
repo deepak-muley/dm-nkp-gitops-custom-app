@@ -1,14 +1,23 @@
 # End-to-End Demo Guide
 
-This guide walks you through running the complete end-to-end demo, including viewing metrics in the Grafana dashboard.
+This guide walks you through running the complete end-to-end demo, including viewing metrics, logs, and traces in Grafana dashboards.
 
-## Quick Start
+## Quick Start (Recommended)
 
-Run the automated script:
+Run the full OpenTelemetry demo script:
 
 ```bash
-./scripts/run-e2e-demo.sh
+./scripts/e2e-demo-otel.sh
 ```
+
+This deploys:
+
+- Kind cluster with the application
+- OpenTelemetry Collector (metrics, logs, traces)
+- Prometheus (metrics storage)
+- Loki 3.0+ (logs storage with native OTLP support)
+- Tempo (distributed tracing)
+- Grafana (pre-configured dashboards)
 
 Then follow the instructions at the end to access Grafana.
 
@@ -342,11 +351,17 @@ After completing all steps, you should see:
 
 ```bash
 # All-in-one commands (RECOMMENDED)
-make e2e-tests                                # Run e2e tests (uses OpenTelemetry)
+make e2e-tests                                # Run automated e2e tests
 
-# Interactive demo with observability stack
-./scripts/e2e-demo-otel.sh                    # Updated script with OpenTelemetry
+# Interactive demo with full observability stack (Recommended)
+./scripts/e2e-demo-otel.sh                    # Sets up: OTel Collector, Prometheus, Loki 3.0+, Tempo, Grafana
 
 # Access Grafana
-kubectl port-forward -n observability svc/prometheus-grafana 3000:80  # Access Grafana
+kubectl port-forward -n observability svc/prometheus-grafana 3000:80
+# Open http://localhost:3000 (admin/admin)
+
+# View dashboards:
+# - dm-nkp-gitops-custom-app - Metrics
+# - dm-nkp-gitops-custom-app - Logs
+# - dm-nkp-gitops-custom-app - Traces
 ```

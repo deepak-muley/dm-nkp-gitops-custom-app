@@ -19,147 +19,124 @@
   "links": [],
   "panels": [
     {
-      "datasource": "Tempo",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "All traces from dm-nkp-gitops-custom-app service",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
       "id": 1,
-      "options": {
-        "legend": {"calcs": [], "displayMode": "table", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
-      },
+      "options": {},
       "targets": [{
         "datasource": {"type": "tempo", "uid": "tempo"},
         "queryType": "traceql",
         "refId": "A",
-        "serviceName": "dm-nkp-gitops-custom-app",
-        "spanName": ""
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" }",
+        "limit": 20
       }],
-      "title": "Trace Search",
+      "title": "All Application Traces",
       "type": "traces"
     },
     {
-      "datasource": "Tempo",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces for GET / requests (main endpoint)",
+      "gridPos": {"h": 12, "w": 12, "x": 0, "y": 12},
       "id": 2,
-      "options": {
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
-      },
+      "options": {},
       "targets": [{
         "datasource": {"type": "tempo", "uid": "tempo"},
         "queryType": "traceql",
         "refId": "A",
-        "query": "{ service.name = \"dm-nkp-gitops-custom-app\" } | rate()",
-        "legendFormat": "Traces per second"
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && span.http.target = \"/\" }",
+        "limit": 20
       }],
-      "title": "Trace Rate",
-      "type": "timeseries"
+      "title": "Traces - Root Endpoint (GET /)",
+      "type": "traces"
     },
     {
-      "datasource": "Tempo",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "s"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces for /health endpoint",
+      "gridPos": {"h": 12, "w": 12, "x": 12, "y": 12},
       "id": 3,
-      "options": {
-        "legend": {"calcs": ["mean", "p50", "p95", "p99"], "displayMode": "table", "placement": "bottom"},
-        "tooltip": {"mode": "multi", "sort": "none"}
-      },
+      "options": {},
       "targets": [{
         "datasource": {"type": "tempo", "uid": "tempo"},
         "queryType": "traceql",
         "refId": "A",
-        "query": "{ service.name = \"dm-nkp-gitops-custom-app\" } | duration()",
-        "legendFormat": "Duration"
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && span.http.target = \"/health\" }",
+        "limit": 20
       }],
-      "title": "Trace Duration Distribution",
-      "type": "histogram"
+      "title": "Traces - Health Check (/health)",
+      "type": "traces"
     },
     {
-      "datasource": "Tempo",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces for /ready endpoint",
+      "gridPos": {"h": 12, "w": 12, "x": 0, "y": 24},
       "id": 4,
-      "options": {
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
-      },
+      "options": {},
       "targets": [{
         "datasource": {"type": "tempo", "uid": "tempo"},
         "queryType": "traceql",
         "refId": "A",
-        "query": "{ service.name = \"dm-nkp-gitops-custom-app\" } | count() by (http.route)",
-        "legendFormat": "{{http.route}}"
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && span.http.target = \"/ready\" }",
+        "limit": 20
       }],
-      "title": "Traces by HTTP Route",
-      "type": "timeseries"
+      "title": "Traces - Readiness Check (/ready)",
+      "type": "traces"
     },
     {
-      "datasource": "Tempo",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none", "hideFrom": {"tooltip": false, "viz": false, "legend": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 400}, {"color": "red", "value": 500}]},
-          "unit": "short"
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces with HTTP 200 status code",
+      "gridPos": {"h": 12, "w": 12, "x": 12, "y": 24},
       "id": 5,
-      "options": {
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "single", "sort": "none"}
-      },
+      "options": {},
       "targets": [{
         "datasource": {"type": "tempo", "uid": "tempo"},
         "queryType": "traceql",
         "refId": "A",
-        "query": "{ service.name = \"dm-nkp-gitops-custom-app\" } | count() by (http.status_code)",
-        "legendFormat": "Status {{http.status_code}}"
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && span.http.status_code = 200 }",
+        "limit": 20
       }],
-      "title": "Traces by HTTP Status Code",
-      "type": "timeseries"
+      "title": "Successful Requests (HTTP 200)",
+      "type": "traces"
+    },
+    {
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces with HTTP error status codes (4xx, 5xx)",
+      "gridPos": {"h": 12, "w": 12, "x": 0, "y": 36},
+      "id": 6,
+      "options": {},
+      "targets": [{
+        "datasource": {"type": "tempo", "uid": "tempo"},
+        "queryType": "traceql",
+        "refId": "A",
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && span.http.status_code >= 400 }",
+        "limit": 20
+      }],
+      "title": "Error Requests (HTTP 4xx/5xx)",
+      "type": "traces"
+    },
+    {
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "description": "Traces with slow response times (> 50ms)",
+      "gridPos": {"h": 12, "w": 12, "x": 12, "y": 36},
+      "id": 7,
+      "options": {},
+      "targets": [{
+        "datasource": {"type": "tempo", "uid": "tempo"},
+        "queryType": "traceql",
+        "refId": "A",
+        "query": "{ resource.service.name = \"dm-nkp-gitops-custom-app\" && duration > 50ms }",
+        "limit": 20
+      }],
+      "title": "Slow Traces (> 50ms)",
+      "type": "traces"
     }
   ],
-  "refresh": "10s",
+  "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["dm-nkp-gitops-custom-app", "tempo", "traces"],
+  "tags": ["dm-nkp-gitops-custom-app", "tempo", "traces", "otel"],
   "templating": {"list": []},
-  "time": {"from": "now-15m", "to": "now"},
+  "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "",
   "title": "dm-nkp-gitops-custom-app - Traces",

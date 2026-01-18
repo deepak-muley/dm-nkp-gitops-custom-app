@@ -61,27 +61,29 @@ opentelemetry:
   enabled: true
   collector:
     # Local OpenTelemetry Operator collector endpoint
-    # Service name matches OpenTelemetryCollector CR name exactly
-    # Default assumes OpenTelemetryCollector CR is named 'collector'
-    # Update based on your actual OpenTelemetryCollector CR name
-    endpoint: "collector.opentelemetry.svc.cluster.local:4317"
+    # ⚠️ IMPORTANT: Service name pattern is <CR-name>-collector (not just CR name)
+    # For e2e-demo-otel.sh: CR is named 'otel-collector', so service is 'otel-collector-collector'
+    endpoint: "otel-collector-collector.observability.svc.cluster.local:4317"
     # Alternative common names (if CR is named differently):
-    # endpoint: "otelcol.opentelemetry.svc.cluster.local:4317"
-    # endpoint: "opentelemetry-collector.opentelemetry.svc.cluster.local:4317"
+    # If CR is 'collector': endpoint: "collector-collector.opentelemetry.svc.cluster.local:4317"
+    # If CR is 'otelcol': endpoint: "otelcol-collector.opentelemetry.svc.cluster.local:4317"
   service:
     name: "dm-nkp-gitops-custom-app"
     namespace: ""
   env:
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "collector.opentelemetry.svc.cluster.local:4317"
+      value: "otel-collector-collector.observability.svc.cluster.local:4317"
+      # ⚠️ IMPORTANT: Service name pattern is <CR-name>-collector
       # Alternative (update based on your OpenTelemetryCollector CR name):
-      # value: "otelcol.opentelemetry.svc.cluster.local:4317"
+      # If CR is 'collector': value: "collector-collector.opentelemetry.svc.cluster.local:4317"
     - name: OTEL_SERVICE_NAME
       value: "dm-nkp-gitops-custom-app"
     - name: OTEL_RESOURCE_ATTRIBUTES
       value: "service.name=dm-nkp-gitops-custom-app,service.version=0.1.0,environment=local"
     - name: OTEL_EXPORTER_OTLP_INSECURE
-      value: "true"  # Local testing uses insecure connection
+      value: "true"
+    - name: OTEL_LOGS_ENABLED
+      value: "true"  # Enable OTLP logging
 
 # Monitoring Configuration - References locally deployed kube-prometheus-stack
 # ⚠️ IMPORTANT: ServiceMonitor will be deployed to Release.Namespace by default
@@ -115,6 +117,19 @@ gateway:
   hostnames:
     - "dm-nkp-gitops-custom-app.local"
 
+# TLS Configuration - DISABLED for local testing
+# ⚠️ Let's Encrypt certificates DO NOT work in local clusters because:
+#    1. Local domains (*.local) are not publicly resolvable
+#    2. ACME HTTP-01 challenge requires Let's Encrypt servers to reach your cluster
+#    3. Local clusters are not accessible from the internet
+# TLS/HTTPS is only for production deployments with real public domains
+tls:
+  enabled: false  # MUST be false for local testing
+  clusterIssuer:
+    create: false  # Don't create ClusterIssuer in local testing
+  certificate:
+    create: false  # Don't create Certificate in local testing
+
 # Grafana Dashboard Configuration - References locally deployed kube-prometheus-stack Grafana
 # ⚠️ IMPORTANT: For local testing, Grafana dashboards will be deployed to Release.Namespace by default
 #   If kube-prometheus-stack is deployed in "monitoring" namespace, you can:
@@ -124,36 +139,45 @@ gateway:
 grafana:
   dashboards:
     enabled: true
-    # Use Release.Namespace for local testing (set to "monitoring" if kube-prometheus-stack is there)
-    namespace: ""  # Empty = Release.Namespace (default), or set to "monitoring" if that namespace exists
+    # For e2e-demo-otel.sh: Use observability namespace where Grafana is deployed
+    # This will be overridden by --set flag in the script, but set a sensible default
+    namespace: "observability"  # Default to observability namespace for local testing
     folder: "/"  # Root folder for local testing
+    # Enable all dashboards for local testing
+    platformFootprint:
+      enabled: true  # Enable platform footprint dashboard
+      folder: "/"  # Use root folder for local testing
+    clusterFootprint:
+      enabled: true  # Enable cluster footprint dashboard
+      folder: "/"  # Use root folder for local testing
   
-  # Datasources Configuration - Disabled by default for local testing
-  # Note: For kube-prometheus-stack, datasources are typically configured via Helm values
-  # Enable this only if you need to manually provision datasources
+  # Datasources Configuration - Enabled for local testing via ConfigMap provisioning
+  # Note: For kube-prometheus-stack, datasources can be configured via ConfigMaps with label grafana_datasource=1
+  # The ConfigMap will be auto-discovered by Grafana if sidecar.datasources.enabled=true (default in kube-prometheus-stack)
   datasources:
-    enabled: false  # Disabled by default - kube-prometheus-stack configures datasources automatically
-    namespace: ""  # Empty = Release.Namespace (default), or set to "monitoring" if that namespace exists
+    enabled: true  # Enabled to provision datasources via ConfigMap (persistent, survives restarts)
+    namespace: "observability"  # Default to observability namespace for local testing
     prometheus:
       enabled: true
       # kube-prometheus-stack service name pattern: <release-name>-kube-prometheus-prometheus
       # Common release name: "prometheus" for local testing
-      url: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+      url: "http://prometheus-kube-prometheus-prometheus.observability.svc.cluster.local:9090"
       # Alternative (if release name is different):
       # url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
       isDefault: true
     loki:
       enabled: true
-      # Update URL if Loki is deployed locally (optional for local testing)
-      # Verify: kubectl get svc -A | grep loki
-      url: "http://loki.monitoring.svc.cluster.local:3100"
-      # Alternative (if using project-grafana-loki locally):
-      # url: "http://project-grafana-loki-gateway.monitoring.svc.cluster.local:80"
+      # Update URL dynamically - will be set by e2e script based on detected Loki service
+      # Default to loki-distributed gateway (common for local testing)
+      url: "http://loki-loki-distributed-gateway.observability.svc.cluster.local:80"
+      # Alternative patterns (will be auto-detected by e2e script):
+      # If using loki-simple-scalable: url: "http://loki.observability.svc.cluster.local:3100"
+      # If using loki-distributed: url: "http://loki-loki-distributed-gateway.observability.svc.cluster.local:80"
     tempo:
       enabled: true
-      # Update URL if Tempo is deployed locally (optional for local testing)
-      # Verify: kubectl get svc -A | grep tempo
-      url: "http://tempo.monitoring.svc.cluster.local:3200"
+      # Update URL dynamically - will be set by e2e script based on detected Tempo service
+      # Default Tempo service name
+      url: "http://tempo.observability.svc.cluster.local:3200"
 
 # Resource limits for local testing (smaller)
 resources:
